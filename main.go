@@ -40,10 +40,10 @@ func main() {
 	flag.IntVar(&poller.Interval, "interval", 1000, "interval in millis between each poll (less than 0 will only have it run once)")
 	flag.StringVar(&poller.OutputFile, "file", "output", "the output for the results to be exported to.  file type (json/xml) is appended by default.")
 	flag.Parse()
-    
-    err := poller.Validate()
-    
-    if err != nil {
+
+	err := poller.Validate()
+
+	if err != nil {
 		println(err)
 		os.Exit(1)
 	}

@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/google/go-querystring/query"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
-    "fmt"
 )
 
 type IndeedPoller struct {
@@ -71,22 +71,22 @@ func (i *IndeedPoller) DoPoll() {
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
-    if err != nil {
-        println("unable to read/write response body to file.", err)
-        return
-    }
+	if err != nil {
+		println("unable to read/write response body to file.", err)
+		return
+	}
 	println("Finished poll: ", url, len(body))
-    if err = i.WriteResultsToFile(body); err != nil {
-        println("failed to write body to file: ", err)
-    }
+	if err = i.WriteResultsToFile(body); err != nil {
+		println("failed to write body to file: ", err)
+	}
 }
 
-func (i * IndeedPoller) GetFileName() string{
-    return fmt.Sprintf("%s-%d.%s", i.OutputFile, time.Now().Unix(), i.Format)
+func (i *IndeedPoller) GetFileName() string {
+	return fmt.Sprintf("%s-%d.%s", i.OutputFile, time.Now().Unix(), i.Format)
 }
 
 func (i *IndeedPoller) WriteResultsToFile(body []byte) error {
-    return ioutil.WriteFile(i.GetFileName(), body, 0644)
+	return ioutil.WriteFile(i.GetFileName(), body, 0644)
 }
 
 func (i *IndeedPoller) Poll() {

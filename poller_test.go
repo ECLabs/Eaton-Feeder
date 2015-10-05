@@ -2,8 +2,8 @@ package main
 
 import (
 	"net/url"
+	"os"
 	"testing"
-    "os"
 )
 
 func TestValidate(t *testing.T) {
@@ -20,6 +20,7 @@ func TestValidate(t *testing.T) {
 		t.Fatal("validate should pass, publisher was set.")
 	}
 }
+
 /*
 More testing can be added for each value
 set within the query string.  this seems
@@ -62,13 +63,13 @@ func TestGetUrl(t *testing.T) {
 	t.Log("Url: ", requestUrl)
 }
 
-func TestWriteFile(t * testing.T){
-    i := new(IndeedPoller)
-    i.OutputFile = "output"
-    i.Format = "xml"
-    err := i.WriteResultsToFile([]byte("<results></results>\n"))
-    if err != nil {
-        t.Fatal("couldn't write to ", i.OutputFile, err)
-    }
-    os.Remove(i.GetFileName())
+func TestWriteFile(t *testing.T) {
+	i := new(IndeedPoller)
+	i.OutputFile = "output"
+	i.Format = "xml"
+	err := i.WriteResultsToFile([]byte("<results></results>\n"))
+	if err != nil {
+		t.Fatal("couldn't write to ", i.OutputFile, err)
+	}
+	os.Remove(i.GetFileName())
 }
