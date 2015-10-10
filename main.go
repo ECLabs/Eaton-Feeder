@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net"
 	"os"
+    "log"
 )
 
 var (
@@ -12,17 +12,13 @@ var (
 	MyIP   string
 )
 
-func println(args ...interface{}) {
-	log.Println(args)
-}
-
 func main() {
 	flag.StringVar(&poller.BaseUrl, "baseUrl", "http://api.indeed.com/ads/apisearch?", "base url for api.indeed.com")
 	flag.StringVar(&poller.Publisher, "publisher", "", "Publisher ID. This is assigned when you register as a publisher.")
 	flag.StringVar(&poller.Version, "version", "2", "Which version of the API you wish to use. All publishers should be using version 2. Currently available versions are 1 and 2")
 	flag.StringVar(&poller.Format, "format", "xml", "Which output format of the API you wish to use. The options are \"xml\" and \"json\". If omitted or invalid, the XML format is used.")
 	flag.StringVar(&poller.Query, "query", "", "By default terms are ANDed. To see what is possible, use our advanced search page to perform a search and then check the url for the q value.")
-	flag.StringVar(&poller.Location, "location", "22033", "Use a postal code or a \"city, state/province/region\" combination.")
+	flag.StringVar(&poller.Location, "location", "", "Use a postal code or a \"city, state/province/region\" combination.")
 	flag.StringVar(&poller.Sort, "sort", "relevance", "Sort by relevance or date.")
 	flag.IntVar(&poller.Radius, "radius", 25, "Distance from search location (\"as the crow flies\").")
 	flag.StringVar(&poller.SiteType, "siteType", "", "To show only jobs from job boards use \"jobsite\". For jobs from direct employer websites use \"employer\".")
@@ -38,17 +34,29 @@ func main() {
 	flag.StringVar(&poller.UserIP, "userIP", GetLocalAddr(), "The IP number of the end-user to whom the job results will be displayed.")
 	flag.StringVar(&poller.UserAgent, "userAgent", "Golang http client", "The User-Agent (browser) of the end-user to whom the job results will be displayed. This can be obtained from the \"User-Agent\" HTTP request header from the end-user.")
 	flag.IntVar(&poller.Interval, "interval", 1000, "interval in millis between each poll (less than 0 will only have it run once)")
-	flag.StringVar(&poller.OutputFile, "file", "output", "the output for the results to be exported to.  file type (json/xml) is appended by default.")
+	flag.StringVar(&poller.KafkaAddresses, "kafkaServers", "", "a comma delimited list of host:port values where kafka is running. (ex. 192.168.0.1:9092,192.168.0.2:9092")
+	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
 	flag.Parse()
+
+	if flag.NArg() == 0 {
+		flag.PrintDefaults()
+		return
+	}
 
 	err := poller.Validate()
 
 	if err != nil {
-		println(err)
+		log.Println(err)
 		os.Exit(1)
 	}
-
-	poller.Poll()
+    if poller.IsProducer() {
+        err = poller.ProduceMessages()
+    }else{
+        err = poller.ConsumeMessages()
+    }
+    if err != nil {
+        log.Println("failed to run poller: ", err)
+    }
 }
 
 func GetLocalAddr() string {
@@ -57,7 +65,7 @@ func GetLocalAddr() string {
 	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		println(err)
+		log.Println(err)
 		os.Exit(1)
 	}
 	for _, a := range addrs {
