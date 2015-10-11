@@ -12,12 +12,12 @@ import (
 var (
 	poller = new(IndeedPoller)
 	MyIP   string
-    wg sync.WaitGroup
-    //Max limit for the indeed api is 25
-    MaxLimit = 25
-    MinLimit = 1
-    MinStart = 0
-    logFile string
+	wg     sync.WaitGroup
+	//Max limit for the indeed api is 25
+	MaxLimit = 25
+	MinLimit = 1
+	MinStart = 0
+	logFile  string
 )
 
 func main() {
@@ -46,17 +46,17 @@ func main() {
 	flag.StringVar(&poller.KafkaTopic, "kafkaTopic", "", "the topic to consume from or produce to.")
 	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
 	flag.BoolVar(&poller.Debug, "debug", false, "set logging level to debug.")
-    flag.StringVar(&logFile, "log", "eaton-feeder.log", "the log file to write results to.")
-    flag.Parse()
-    
-    file, err := os.OpenFile(logFile, os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
-    if err != nil {
-        log.Fatal("failed to create log file: ", err)
-    }
-    
-    defer file.Close()
-    log.SetOutput(file)
-    
+	flag.StringVar(&logFile, "log", "eaton-feeder.log", "the log file to write results to.")
+	flag.Parse()
+
+	file, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("failed to create log file: ", err)
+	}
+
+	defer file.Close()
+	log.SetOutput(file)
+
 	if flag.NFlag() == 0 {
 		flag.PrintDefaults()
 		return
@@ -69,17 +69,17 @@ func main() {
 	}
 
 	if poller.IsProducer() {
-        wg.Add(poller.Limit)
+		wg.Add(poller.Limit)
 		onSuccess := func(successChannel <-chan *sarama.ProducerMessage) {
 			for success := range successChannel {
 				log.Println("successfully sent message to kafka topic: ", success.Topic)
-                wg.Done()
+				wg.Done()
 			}
 		}
 		onError := func(errChannel <-chan *sarama.ProducerError) {
 			for err := range errChannel {
-                log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
-                wg.Done()
+				log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
+				wg.Done()
 			}
 		}
 		err := poller.InitWithProducerHandlerFunctions(onSuccess, onError)
@@ -87,7 +87,7 @@ func main() {
 			log.Fatal("Failed to initialize connection to kafka servers: ", err)
 		}
 		err = poller.ProduceMessages()
-        wg.Wait()
+		wg.Wait()
 	} else {
 		err = poller.ConsumeMessages()
 	}

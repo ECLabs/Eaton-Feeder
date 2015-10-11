@@ -200,15 +200,15 @@ func (i *IndeedPoller) Validate() error {
 	if i.KafkaTopic == "" {
 		return errors.New("a kafka topic to produce/consume is required")
 	}
-    if i.Limit > MaxLimit {
-        i.Limit = MaxLimit
-    }
-    if i.Limit < MinLimit {
-        i.Limit = MinLimit
-    }
-    if i.Start < MinStart {
-        i.Start = MinStart
-    }
+	if i.Limit > MaxLimit {
+		i.Limit = MaxLimit
+	}
+	if i.Limit < MinLimit {
+		i.Limit = MinLimit
+	}
+	if i.Start < MinStart {
+		i.Start = MinStart
+	}
 	return nil
 }
 
@@ -272,6 +272,7 @@ func (i *IndeedPoller) ProduceMessages() error {
 	if !i.IsProducer() {
 		return errors.New("poller is not configured to be a producer!")
 	}
+
 	result, err := i.GetMostRecentResult()
 	if err != nil {
 		return err
