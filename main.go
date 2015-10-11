@@ -39,7 +39,7 @@ func main() {
 	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
 	flag.Parse()
 
-	if flag.NArg() == 0 {
+	if flag.NFlag() == 0 {
 		flag.PrintDefaults()
 		return
 	}
