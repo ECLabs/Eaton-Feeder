@@ -48,6 +48,7 @@ type IndeedPoller struct {
 	addrs              []string                   `url:"-"`
 	KafkaTopic         string                     `url:"-"`
 	partitionConsumers []sarama.PartitionConsumer `url:"-"`
+	Debug              bool                       `url:"-"`
 }
 
 type HandleProducerMessage func(<-chan *sarama.ProducerMessage)
@@ -120,7 +121,9 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 			return err
 		}
 		i.Consumer = consumer
-		log.Println("Finding topics...")
+		if i.Debug {
+			log.Println("Finding topics...")
+		}
 		topics, err := i.Consumer.Topics()
 		if err != nil {
 			return err
@@ -128,7 +131,9 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 		if len(topics) == 0 {
 			return errors.New("no topics are available!")
 		}
-		log.Println("Found topics: ", topics)
+		if i.Debug {
+			log.Println("Found topics: ", topics)
+		}
 		found := false
 		for _, topic := range topics {
 			found = strings.Compare(i.KafkaTopic, topic) == 0
@@ -143,7 +148,9 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 		if err != nil {
 			return err
 		}
-		log.Println("Returned Partitions for topic: ", i.KafkaTopic, partitions)
+		if i.Debug {
+			log.Println("Returned Partitions for topic: ", i.KafkaTopic, partitions)
+		}
 		if len(partitions) == 0 {
 			return errors.New("no partitions returned to consume!")
 		}
@@ -193,6 +200,15 @@ func (i *IndeedPoller) Validate() error {
 	if i.KafkaTopic == "" {
 		return errors.New("a kafka topic to produce/consume is required")
 	}
+    if i.Limit > MaxLimit {
+        i.Limit = MaxLimit
+    }
+    if i.Limit < MinLimit {
+        i.Limit = MinLimit
+    }
+    if i.Start < MinStart {
+        i.Start = MinStart
+    }
 	return nil
 }
 
@@ -208,7 +224,9 @@ func (i *IndeedPoller) GetUrl() string {
 	buffer.WriteString(i.BaseUrl)
 	buffer.WriteString(values.Encode())
 	i.url = buffer.String()
-	log.Println("Full url: ", i.url)
+	if i.Debug {
+		log.Println("Full url: ", i.url)
+	}
 	return i.url
 }
 
@@ -224,7 +242,9 @@ func (i *IndeedPoller) GetMostRecentResult() (*ApiSearchResult, error) {
 		return nil, err
 	}
 	response := new(ApiSearchResult)
-	log.Println("Body: ", string(body))
+	if i.Debug {
+		log.Println("Body: ", string(body))
+	}
 	err = xml.Unmarshal(body, response)
 	if err != nil {
 		return nil, err

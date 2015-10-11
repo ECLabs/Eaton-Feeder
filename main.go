@@ -2,14 +2,22 @@ package main
 
 import (
 	"flag"
+	"github.com/Shopify/sarama"
 	"log"
 	"net"
 	"os"
+	"sync"
 )
 
 var (
 	poller = new(IndeedPoller)
 	MyIP   string
+    wg sync.WaitGroup
+    //Max limit for the indeed api is 25
+    MaxLimit = 25
+    MinLimit = 1
+    MinStart = 0
+    logFile string
 )
 
 func main() {
@@ -23,8 +31,8 @@ func main() {
 	flag.IntVar(&poller.Radius, "radius", 25, "Distance from search location (\"as the crow flies\").")
 	flag.StringVar(&poller.SiteType, "siteType", "", "To show only jobs from job boards use \"jobsite\". For jobs from direct employer websites use \"employer\".")
 	flag.StringVar(&poller.JobType, "jobType", "fulltime", "Allowed values: \"fulltime\", \"parttime\", \"contract\", \"internship\", \"temporary\".")
-	flag.IntVar(&poller.Start, "start", 0, "Start results at this result number, beginning with 0.")
-	flag.IntVar(&poller.Limit, "limit", 50, "Maximum number of results returned per query.")
+	flag.IntVar(&poller.Start, "start", MinStart, "Start results at this result number, beginning with 0.")
+	flag.IntVar(&poller.Limit, "limit", MaxLimit, "Maximum number of results returned per query.")
 	flag.IntVar(&poller.FromAge, "fromAge", 0, "Number of days back to search.")
 	flag.BoolVar(&poller.HighLight, "highlight", false, "Setting this value to true will bold terms in the snippet that are also present in Query. Default is false.")
 	flag.BoolVar(&poller.Filter, "filter", true, "Filter duplicate results. False turns off duplicate job filtering. Default is true.")
@@ -37,26 +45,55 @@ func main() {
 	flag.StringVar(&poller.KafkaAddresses, "kafkaServers", "", "a comma delimited list of host:port values where kafka is running. (ex. 192.168.0.1:9092,192.168.0.2:9092")
 	flag.StringVar(&poller.KafkaTopic, "kafkaTopic", "", "the topic to consume from or produce to.")
 	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
-	flag.Parse()
-
+	flag.BoolVar(&poller.Debug, "debug", false, "set logging level to debug.")
+    flag.StringVar(&logFile, "log", "eaton-feeder.log", "the log file to write results to.")
+    flag.Parse()
+    
+    file, err := os.OpenFile(logFile, os.O_RDWR | os.O_CREATE | os.O_APPEND, 0666)
+    if err != nil {
+        log.Fatal("failed to create log file: ", err)
+    }
+    
+    defer file.Close()
+    log.SetOutput(file)
+    
 	if flag.NFlag() == 0 {
 		flag.PrintDefaults()
 		return
 	}
 
-	err := poller.Validate()
+	err = poller.Validate()
 
 	if err != nil {
-		log.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
+
 	if poller.IsProducer() {
+        wg.Add(poller.Limit)
+		onSuccess := func(successChannel <-chan *sarama.ProducerMessage) {
+			for success := range successChannel {
+				log.Println("successfully sent message to kafka topic: ", success.Topic)
+                wg.Done()
+			}
+		}
+		onError := func(errChannel <-chan *sarama.ProducerError) {
+			for err := range errChannel {
+                log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
+                wg.Done()
+			}
+		}
+		err := poller.InitWithProducerHandlerFunctions(onSuccess, onError)
+		if err != nil {
+			log.Fatal("Failed to initialize connection to kafka servers: ", err)
+		}
 		err = poller.ProduceMessages()
+        wg.Wait()
 	} else {
 		err = poller.ConsumeMessages()
 	}
+
 	if err != nil {
-		log.Println("failed to run poller: ", err)
+		log.Fatal("failed to run poller: ", err)
 	}
 }
 
