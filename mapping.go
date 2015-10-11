@@ -27,6 +27,7 @@ type JobResults struct {
 }
 
 type JobResult struct {
+	XMLName               xml.Name   `xml:"result"`
 	JobTitle              string     `xml:"jobtitle" json:"jobtitle"`
 	Company               string     `xml:"company" json:"company"`
 	City                  string     `xml:"city" json:"city"`

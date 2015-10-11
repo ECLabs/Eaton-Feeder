@@ -1,10 +1,10 @@
 package main
 
 import (
+	"github.com/Shopify/sarama"
 	"net/url"
 	"os"
 	"testing"
-	"github.com/Shopify/sarama"
 )
 
 func TestValidate(t *testing.T) {
@@ -17,10 +17,11 @@ func TestValidate(t *testing.T) {
 	i.Publisher = "12345667"
 	i.Format = "xml"
 	i.KafkaAddresses = "localhost:9092"
+    i.KafkaTopic = "eaton-feeder-test"
 	err = i.Validate()
 
 	if err != nil {
-		t.Fatal("validate should pass, publisher and format was set.")
+		t.Fatal("validate should pass, publisher, format, addresses, and topic were set.")
 	}
 }
 
@@ -94,7 +95,7 @@ func TestGetMostRecentResult(t *testing.T) {
 	}
 }
 
-func getPoller(t * testing.T) *IndeedPoller {
+func getPoller(t *testing.T) *IndeedPoller {
 	i := new(IndeedPoller)
 	i.Publisher = os.Getenv("INDEED_PUBLISHER_ID")
 	if i.Publisher == "" {
@@ -117,14 +118,14 @@ func getPoller(t * testing.T) *IndeedPoller {
 	i.UserIP = GetLocalAddr()
 	i.UserAgent = "Golang http client"
 	i.KafkaAddresses = os.Getenv("KAFKA_SERVERS")
-    i.KafkaTopic = "eaton-feeder-test"
+	i.KafkaTopic = "eaton-feeder-test"
 	if i.KafkaAddresses == "" {
 		t.Fatal("missing KAFKA_SERVERS os env variable")
 	}
-    err := i.Validate()
-    if err != nil {
-        t.Fatal("not a valid poller config: ", err)
-    }
+	err := i.Validate()
+	if err != nil {
+		t.Fatal("not a valid poller config: ", err)
+	}
 	return i
 }
 
@@ -163,34 +164,33 @@ func TestSendMessageToKafka(t *testing.T) {
 	}
 }
 
-func TestConsumeMessageFromKafka(t * testing.T){
-    i := getPoller(t)
-    i.Consume = true
-    resultChannel := make(chan bool)
-    onMsg := func(msgChannel <-chan *sarama.ConsumerMessage) {
-        t.Log("Waiting for incoming messages...")
-        for msg := range msgChannel {
-            t.Log("Received Message: ", msg)
-            resultChannel <- true
-        }
-    }
-    onErr := func(errorChannel <-chan *sarama.ConsumerError) {
-        t.Log("Waiting for incoming consumer errors...")
-        for err := range errorChannel {
-            t.Log("Failed consume from kafka:", err)
-            resultChannel <- false
-        }
-    }
-    i.InitWithConsumerHandlerFunctions(onMsg, onErr)
-    defer func(){
-        i.Consumer.Close()
-        for index := range i.partitionConsumers {
-            c := i.partitionConsumers[index]
-            c.Close()
-        }
-    }()
-    result := <- resultChannel
-    if !result {
-        t.Fatal("failed to get messages!")
-    }
+func TestConsumeMessageFromKafka(t *testing.T) {
+	i := getPoller(t)
+	i.Consume = true
+	resultChannel := make(chan bool)
+	onMsg := func(msgChannel <-chan *sarama.ConsumerMessage) {
+		t.Log("Waiting for incoming messages...")
+		for msg := range msgChannel {
+			t.Log("Received Message: ", msg)
+			resultChannel <- true
+		}
+	}
+	onErr := func(errorChannel <-chan *sarama.ConsumerError) {
+		t.Log("Waiting for incoming consumer errors...")
+		for err := range errorChannel {
+			t.Log("Failed consume from kafka:", err)
+			resultChannel <- false
+		}
+	}
+	i.InitWithConsumerHandlerFunctions(onMsg, onErr)
+	defer func() {
+		i.Consumer.Close()
+		for _, c := range i.partitionConsumers {
+			c.Close()
+		}
+	}()
+	result := <-resultChannel
+	if !result {
+		t.Fatal("failed to get messages!")
+	}
 }

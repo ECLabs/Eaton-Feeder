@@ -77,14 +77,14 @@ var DefaultHandleProducerErrorMessage = func(errorChannel <-chan *sarama.Produce
 }
 
 var DefaultHandleConsumerMessage = func(msgChannel <-chan *sarama.ConsumerMessage) {
-    log.Println("Waiting for incoming messages...")
+	log.Println("Waiting for incoming messages...")
 	for msg := range msgChannel {
 		log.Println("Received Message: ", msg)
 	}
 }
 
 var DefaultHandleConsumerError = func(errorChannel <-chan *sarama.ConsumerError) {
-    log.Println("Waiting for incoming consumer errors...")
+	log.Println("Waiting for incoming consumer errors...")
 	for err := range errorChannel {
 		log.Println("Failed consume from kafka:", err)
 	}
@@ -120,13 +120,26 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 			return err
 		}
 		i.Consumer = consumer
-        log.Println("Finding topics...")
+		log.Println("Finding topics...")
 		topics, err := i.Consumer.Topics()
-        if err != nil {
-            return err
-        }
-        log.Println("Found topics: ", topics)
-        partitions, err := i.Consumer.Partitions(i.KafkaTopic)
+		if err != nil {
+			return err
+		}
+		if len(topics) == 0 {
+			return errors.New("no topics are available!")
+		}
+		log.Println("Found topics: ", topics)
+		found := false
+		for _, topic := range topics {
+			found = strings.Compare(i.KafkaTopic, topic) == 0
+			if found {
+				break
+			}
+		}
+		if !found {
+			return errors.New("configured topic is not present in returned topics.")
+		}
+		partitions, err := i.Consumer.Partitions(i.KafkaTopic)
 		if err != nil {
 			return err
 		}
@@ -134,19 +147,18 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 		if len(partitions) == 0 {
 			return errors.New("no partitions returned to consume!")
 		}
-        
+
 		i.partitionConsumers = make([]sarama.PartitionConsumer, len(partitions), len(partitions))
-		for index := range partitions {
-			partition := partitions[index]
-            log.Println("Creating partition consumer for partition: ", partition, " with offset: ", sarama.OffsetOldest)
-			partitionConsumer, err := i.Consumer.ConsumePartition(i.KafkaTopic, partition, sarama.OffsetOldest)
-            log.Println("Created partition consumer: ", consumer)
+		for index, partition := range partitions {
+			log.Println("Creating partition consumer for partition: ", partition, " with offset: ", sarama.OffsetOldest)
+			partitionConsumer, err := consumer.ConsumePartition(i.KafkaTopic, partition, sarama.OffsetOldest)
+			log.Println("Created partition consumer: ", consumer)
 			if err != nil {
 				return err
 			}
-            if partitionConsumer == nil {
-                return errors.New("nil consumer returned!")
-            }
+			if partitionConsumer == nil {
+				return errors.New("nil consumer returned!")
+			}
 			go handleConsumerMessage(partitionConsumer.Messages())
 			go handleConsumerError(partitionConsumer.Errors())
 			i.partitionConsumers[index] = partitionConsumer
@@ -178,6 +190,9 @@ func (i *IndeedPoller) Validate() error {
 	if len(i.addrs) == 0 {
 		return errors.New("no kafka servers specified!")
 	}
+    if i.KafkaTopic == "" {
+        return errors.New("a kafka topic to produce/consume is required")
+    }
 	return nil
 }
 
@@ -219,8 +234,7 @@ func (i *IndeedPoller) GetMostRecentResult() (*ApiSearchResult, error) {
 
 func (i *IndeedPoller) SendResultToKafka(result *ApiSearchResult) {
 	list := result.Results.JobResultList
-	for index := range list {
-		job := list[index]
+	for _, job := range list {
 		bytes, err := xml.Marshal(job)
 		if err != nil {
 			log.Println("Unable to marshal message to send: ", err)
