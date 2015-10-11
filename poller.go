@@ -190,9 +190,9 @@ func (i *IndeedPoller) Validate() error {
 	if len(i.addrs) == 0 {
 		return errors.New("no kafka servers specified!")
 	}
-    if i.KafkaTopic == "" {
-        return errors.New("a kafka topic to produce/consume is required")
-    }
+	if i.KafkaTopic == "" {
+		return errors.New("a kafka topic to produce/consume is required")
+	}
 	return nil
 }
 

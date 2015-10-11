@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
+	"log"
 	"net"
 	"os"
-    "log"
 )
 
 var (
@@ -36,7 +36,7 @@ func main() {
 	flag.IntVar(&poller.Interval, "interval", 1000, "interval in millis between each poll (less than 0 will only have it run once)")
 	flag.StringVar(&poller.KafkaAddresses, "kafkaServers", "", "a comma delimited list of host:port values where kafka is running. (ex. 192.168.0.1:9092,192.168.0.2:9092")
 	flag.StringVar(&poller.KafkaTopic, "kafkaTopic", "", "the topic to consume from or produce to.")
-    flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
+	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
 	flag.Parse()
 
 	if flag.NArg() == 0 {
@@ -50,14 +50,14 @@ func main() {
 		log.Println(err)
 		os.Exit(1)
 	}
-    if poller.IsProducer() {
-        err = poller.ProduceMessages()
-    }else{
-        err = poller.ConsumeMessages()
-    }
-    if err != nil {
-        log.Println("failed to run poller: ", err)
-    }
+	if poller.IsProducer() {
+		err = poller.ProduceMessages()
+	} else {
+		err = poller.ConsumeMessages()
+	}
+	if err != nil {
+		log.Println("failed to run poller: ", err)
+	}
 }
 
 func GetLocalAddr() string {

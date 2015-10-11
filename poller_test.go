@@ -17,7 +17,7 @@ func TestValidate(t *testing.T) {
 	i.Publisher = "12345667"
 	i.Format = "xml"
 	i.KafkaAddresses = "localhost:9092"
-    i.KafkaTopic = "eaton-feeder-test"
+	i.KafkaTopic = "eaton-feeder-test"
 	err = i.Validate()
 
 	if err != nil {
