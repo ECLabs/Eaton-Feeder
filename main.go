@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"github.com/Shopify/sarama"
 	"log"
 	"net"
 	"os"
@@ -41,7 +40,7 @@ func main() {
 	flag.StringVar(&poller.Channel, "channel", "", "Channel Name: Group API requests to a specific channel")
 	flag.StringVar(&poller.UserIP, "userIP", GetLocalAddr(), "The IP number of the end-user to whom the job results will be displayed.")
 	flag.StringVar(&poller.UserAgent, "userAgent", "Golang http client", "The User-Agent (browser) of the end-user to whom the job results will be displayed. This can be obtained from the \"User-Agent\" HTTP request header from the end-user.")
-	flag.IntVar(&poller.Interval, "interval", 1000, "interval in millis between each poll (less than 0 will only have it run once)")
+	flag.IntVar(&poller.Interval, "interval", 1000, "interval in millis between each poll (less than 0 will only have it run once). This is ignored if in --consume=true")
 	flag.StringVar(&poller.KafkaAddresses, "kafkaServers", "", "a comma delimited list of host:port values where kafka is running. (ex. 192.168.0.1:9092,192.168.0.2:9092")
 	flag.StringVar(&poller.KafkaTopic, "kafkaTopic", "", "the topic to consume from or produce to.")
 	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
@@ -69,25 +68,7 @@ func main() {
 	}
 
 	if poller.IsProducer() {
-		wg.Add(poller.Limit)
-		onSuccess := func(successChannel <-chan *sarama.ProducerMessage) {
-			for success := range successChannel {
-				log.Println("successfully sent message to kafka topic: ", success.Topic)
-				wg.Done()
-			}
-		}
-		onError := func(errChannel <-chan *sarama.ProducerError) {
-			for err := range errChannel {
-				log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
-				wg.Done()
-			}
-		}
-		err := poller.InitWithProducerHandlerFunctions(onSuccess, onError)
-		if err != nil {
-			log.Fatal("Failed to initialize connection to kafka servers: ", err)
-		}
 		err = poller.ProduceMessages()
-		wg.Wait()
 	} else {
 		err = poller.ConsumeMessages()
 	}

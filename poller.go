@@ -5,11 +5,22 @@ import (
 	"encoding/xml"
 	"errors"
 	"github.com/Shopify/sarama"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/google/go-querystring/query"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	dbSvc = dynamodb.New(nil)
+	s3Svc = s3.New(nil)
 )
 
 type IndeedPoller struct {
@@ -39,6 +50,7 @@ type IndeedPoller struct {
 	//then send messages to kafka, or will poll the kafka
 	//servers for messages to send to S3
 	Consume            bool                       `url:"-"`
+	EndConsumeOnError  bool                       `url:"-"`
 	BaseUrl            string                     `url:"-"`
 	Interval           int                        `url:"-"`
 	url                string                     `url:"-"`
@@ -49,6 +61,8 @@ type IndeedPoller struct {
 	KafkaTopic         string                     `url:"-"`
 	partitionConsumers []sarama.PartitionConsumer `url:"-"`
 	Debug              bool                       `url:"-"`
+	DynamoDbTableName  string                     `url:"-"`
+	S3BucketName       string                     `url:"-"`
 }
 
 type HandleProducerMessage func(<-chan *sarama.ProducerMessage)
@@ -157,9 +171,13 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 
 		i.partitionConsumers = make([]sarama.PartitionConsumer, len(partitions), len(partitions))
 		for index, partition := range partitions {
-			log.Println("Creating partition consumer for partition: ", partition, " with offset: ", sarama.OffsetOldest)
+			if i.Debug {
+				log.Println("Creating partition consumer for partition: ", partition, " with offset: ", sarama.OffsetOldest)
+			}
 			partitionConsumer, err := consumer.ConsumePartition(i.KafkaTopic, partition, sarama.OffsetOldest)
-			log.Println("Created partition consumer: ", consumer)
+			if i.Debug {
+				log.Println("Created partition consumer: ", consumer)
+			}
 			if err != nil {
 				return err
 			}
@@ -218,7 +236,7 @@ func (i *IndeedPoller) GetUrl() string {
 	}
 	values, err := query.Values(i)
 	if err != nil {
-		log.Fatal("falied to parse struct: ", i, err)
+		log.Fatal("failed to parse struct of IndeedPoller: ", i, err)
 	}
 	buffer := new(bytes.Buffer)
 	buffer.WriteString(i.BaseUrl)
@@ -272,15 +290,139 @@ func (i *IndeedPoller) ProduceMessages() error {
 	if !i.IsProducer() {
 		return errors.New("poller is not configured to be a producer!")
 	}
+	if i.Interval < 0 {
+		if i.Debug {
+			log.Println("polling is disabled, will only execute once.")
+		}
+		err := i.doProduceMessages()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	t := time.NewTicker(time.Duration(i.Interval) * time.Millisecond)
+	for _ = range t.C {
+		err := i.doProduceMessages()
+        if err != nil {
+			return err
+		}
+	}
+    return nil
+}
 
+func (i *IndeedPoller) doProduceMessages() error {
+	var wg sync.WaitGroup
+	wg.Add(i.Limit)
+	onSuccess := func(successChannel <-chan *sarama.ProducerMessage) {
+		for success := range successChannel {
+			log.Println("successfully sent message to kafka topic: ", success.Topic)
+			wg.Done()
+		}
+	}
+	onError := func(errChannel <-chan *sarama.ProducerError) {
+		for err := range errChannel {
+			log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
+			wg.Done()
+		}
+	}
+	err := i.InitWithProducerHandlerFunctions(onSuccess, onError)
+	if err != nil {
+		return err
+	}
 	result, err := i.GetMostRecentResult()
 	if err != nil {
 		return err
 	}
 	i.SendResultToKafka(result)
+	wg.Wait()
 	return nil
 }
 
 func (i *IndeedPoller) ConsumeMessages() error {
-	return errors.New("not implemented!")
+	if !i.IsConsumer() {
+		return errors.New("poller is not configured to be a consumer!")
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	onMessage := func(msgChannel <-chan *sarama.ConsumerMessage) {
+		if i.Debug {
+			log.Println("Waiting for incoming messages...")
+		}
+		for msg := range msgChannel {
+			if i.Debug {
+				log.Println("Received Message: ", msg)
+			}
+			result := new(JobResult)
+			err := xml.Unmarshal(msg.Value, result)
+			if err != nil {
+				log.Println("unable to marshal message into a JobResult: ", err)
+				if i.EndConsumeOnError {
+					wg.Done()
+				}
+                continue
+			}
+			//in order to get as much throughput as possible
+			//the two aws api calls are executed in a different
+			//goroutine than the one the channel is being read with.
+            //TODO: Write and run tests confirming all works...
+			go func(value []byte, result * JobResult) {
+                _, err := s3Svc.PutObject(&s3.PutObjectInput{
+					Bucket: aws.String(i.S3BucketName),
+					Key:    aws.String(result.JobKey),
+                    Body: bytes.NewReader(value),
+				})
+                
+                if err != nil {
+                    log.Println("failed to put job result into s3 bucket: ", i.S3BucketName, err)
+                    if i.EndConsumeOnError {
+                        wg.Done()
+                    }
+                    return
+                }
+                metadata := NewJobResultMetaData(result, i.S3BucketName, value)
+                
+				item, err := dynamodbattribute.ConvertToMap(metadata)
+				if err != nil {
+					log.Println("unable to convert JobResult to AttributeItem: ", err)
+					if i.EndConsumeOnError {
+						wg.Done()
+					}
+                    return
+				}
+				_, err = dbSvc.PutItem(&dynamodb.PutItemInput{
+					Item:      item,
+					TableName: aws.String(i.DynamoDbTableName),
+				})
+				if err != nil {
+					log.Println("failed to save item to dynamodb: ", err)
+					if i.EndConsumeOnError {
+						wg.Done()
+					}
+                    return
+				}
+
+			}(msg.Value, result)
+
+		}
+	}
+	onError := func(errorChannel <-chan *sarama.ConsumerError) {
+		if i.Debug {
+			log.Println("Waiting for incoming consumer errors...")
+		}
+		for err := range errorChannel {
+			if i.EndConsumeOnError {
+				wg.Done()
+			}
+			log.Println("Failed consume from kafka:", err)
+		}
+	}
+	err := i.InitWithConsumerHandlerFunctions(onMessage, onError)
+	defer func() {
+		i.Consumer.Close()
+	}()
+	if err != nil {
+		return err
+	}
+	wg.Wait()
+	return nil
 }

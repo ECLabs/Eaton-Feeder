@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"time"
+    "fmt"
 )
 
 //TODO: Fix json unmarshalling issues.  Current story only calls for XML.
@@ -88,4 +89,21 @@ func (c *customTime) UnmarshalJSON(b []byte) error {
 	}
 	*c = customTime{value}
 	return nil
+}
+
+//The type that's stored within the UserID DynamoDB table.
+type JobResultMetaData struct {
+	CreateDate customTime `json:"CreateDate"`
+	JobKey     string     `json:"UserEmail"`
+	RawBytes   string     `json:"UserFile"`
+	Url        string     `json:"Url"`
+}
+
+func NewJobResultMetaData(result * JobResult, bucketName string, resultBytes []byte) * JobResultMetaData{
+    return &JobResultMetaData{
+        Url: fmt.Sprintf("https://s3.amazon.com/%s/%s", bucketName, result.JobKey),
+        JobKey: result.JobKey,
+        RawBytes: string(resultBytes),
+        CreateDate: customTime{time.Now()},
+    }
 }
