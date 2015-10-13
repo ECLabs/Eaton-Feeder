@@ -45,7 +45,11 @@ func main() {
 	flag.StringVar(&poller.KafkaTopic, "kafkaTopic", "", "the topic to consume from or produce to.")
 	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
 	flag.BoolVar(&poller.Debug, "debug", false, "set logging level to debug.")
+	flag.StringVar(&poller.S3BucketName, "bucket", "eaton-jobdescription-bucket", "the bucket to store retrieved indeed api messages from.")
+	flag.StringVar(&poller.DynamoDbTableName, "table", "Documents", "the dynamodb table to store the indeed api messages.")
 	flag.StringVar(&logFile, "log", "eaton-feeder.log", "the log file to write results to.")
+	flag.StringVar(&AWSRegion, "region", "us-west-2", "the aws region to use when saving content to dynamodb and s3.")
+	flag.StringVar(&offsetType, "offset", "oldest", "the offset to use. either \"oldest\" or \"newest\" ")
 	flag.Parse()
 
 	file, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)

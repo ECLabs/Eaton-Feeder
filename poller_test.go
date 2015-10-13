@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestValidate(t *testing.T) {
@@ -18,10 +19,11 @@ func TestValidate(t *testing.T) {
 	i.Format = "xml"
 	i.KafkaAddresses = "localhost:9092"
 	i.KafkaTopic = "eaton-feeder-test"
+	i.Location = "22033"
 	err = i.Validate()
 
 	if err != nil {
-		t.Fatal("validate should pass, publisher, format, addresses, and topic were set.")
+		t.Fatal("validate should pass, publisher, format, addresses, location, and topic were set.")
 	}
 }
 
@@ -129,6 +131,10 @@ func getPoller(t *testing.T) *IndeedPoller {
 	return i
 }
 
+//This tests the connectivity with the kafka
+//server and ensures that the functions below
+//can at least produce messages to the kafka
+//broker
 func TestSendMessageToKafka(t *testing.T) {
 	i := getPoller(t)
 	resultChannel := make(chan bool)
@@ -164,6 +170,18 @@ func TestSendMessageToKafka(t *testing.T) {
 	}
 }
 
+//Tests the actual IndeedPoller.ProduceMessages function
+func TestProduceMessages(t *testing.T) {
+	i := getPoller(t)
+	err := i.ProduceMessages()
+	if err != nil {
+		t.Fatal("failed to produce messages: ", err)
+	}
+}
+
+//This tests the connectivity with the kafka server
+//and ensures that at least the functions below
+//can consume messages from a kafka broker.
 func TestConsumeMessageFromKafka(t *testing.T) {
 	i := getPoller(t)
 	i.Consume = true
@@ -192,5 +210,27 @@ func TestConsumeMessageFromKafka(t *testing.T) {
 	result := <-resultChannel
 	if !result {
 		t.Fatal("failed to get messages!")
+	}
+}
+
+//Tests the actual IndeedPoller.ConsumeMessages function
+func TestConsumeMessages(t *testing.T) {
+	i := getPoller(t)
+	i.EndConsumeOnError = true
+	i.Consume = true
+	i.Debug = true
+	i.DynamoDbTableName = "Documents"
+	i.S3BucketName = "eaton-jobdescription-bucket"
+	errChannel := make(chan error)
+	go func() {
+		errChannel <- i.ConsumeMessages()
+	}()
+	ticker := time.NewTicker(time.Duration(10000) * time.Millisecond)
+
+	select {
+	case err := <-errChannel:
+		t.Fatal("failed to consume messages: ", err)
+	case <-ticker.C:
+		return
 	}
 }

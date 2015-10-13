@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/google/go-querystring/query"
 	"io/ioutil"
@@ -19,8 +20,14 @@ import (
 )
 
 var (
-	dbSvc = dynamodb.New(nil)
-	s3Svc = s3.New(nil)
+	AWSRegion    = "us-west-2"
+	envCreds     = credentials.NewEnvCredentials()
+	config       = aws.NewConfig().WithCredentials(envCreds).WithRegion(AWSRegion)
+	dbSvc        = dynamodb.New(config)
+	s3Svc        = s3.New(config)
+	retryCount   = 5
+	chosenOffset = sarama.OffsetOldest
+	offsetType   = "oldest"
 )
 
 type IndeedPoller struct {
@@ -168,13 +175,12 @@ func (i *IndeedPoller) InitWithFunctions(handleProducerMessage HandleProducerMes
 		if len(partitions) == 0 {
 			return errors.New("no partitions returned to consume!")
 		}
-
 		i.partitionConsumers = make([]sarama.PartitionConsumer, len(partitions), len(partitions))
 		for index, partition := range partitions {
 			if i.Debug {
-				log.Println("Creating partition consumer for partition: ", partition, " with offset: ", sarama.OffsetOldest)
+				log.Println("Creating partition consumer for partition: ", partition, " with offset: ", chosenOffset)
 			}
-			partitionConsumer, err := consumer.ConsumePartition(i.KafkaTopic, partition, sarama.OffsetOldest)
+			partitionConsumer, err := consumer.ConsumePartition(i.KafkaTopic, partition, chosenOffset)
 			if i.Debug {
 				log.Println("Created partition consumer: ", consumer)
 			}
@@ -205,28 +211,55 @@ func (i *IndeedPoller) Init() error {
 }
 
 func (i *IndeedPoller) Validate() error {
-	if i.Publisher == "" {
-		return errors.New("publisher is required!")
-	}
-	if i.Format != "xml" {
-		return errors.New("xml is the only supported format right now!")
-	}
 	i.addrs = strings.Split(i.KafkaAddresses, ",")
 	if len(i.addrs) == 0 {
 		return errors.New("no kafka servers specified!")
 	}
 	if i.KafkaTopic == "" {
-		return errors.New("a kafka topic to produce/consume is required")
+		return errors.New("a kafka topic to produce/consume is required!")
 	}
-	if i.Limit > MaxLimit {
-		i.Limit = MaxLimit
+	if i.IsProducer() {
+		if i.Publisher == "" {
+			return errors.New("publisher is required!")
+		}
+		if i.Format != "xml" {
+			return errors.New("xml is the only supported format right now!")
+		}
+		if i.Location == "" {
+			return errors.New("a location is required!")
+		}
+		if i.Limit > MaxLimit {
+			i.Limit = MaxLimit
+		}
+		if i.Limit < MinLimit {
+			i.Limit = MinLimit
+		}
+		if i.Start < MinStart {
+			i.Start = MinStart
+		}
 	}
-	if i.Limit < MinLimit {
-		i.Limit = MinLimit
+	if i.IsConsumer() {
+		if AWSRegion == "" {
+			return errors.New("an aws region is required!")
+		}
+		if i.S3BucketName == "" {
+			return errors.New("a bucket to store the description is required for consumers!")
+		}
+		if i.DynamoDbTableName == "" {
+			return errors.New("a dynamodb table name is required for consumers!")
+		}
+		switch offsetType {
+		case "newest":
+			chosenOffset = sarama.OffsetNewest
+			break
+		case "oldest":
+			chosenOffset = sarama.OffsetOldest
+			break
+		default:
+			return errors.New("unknown offset type chosen. only oldest or newest is allowed.")
+		}
 	}
-	if i.Start < MinStart {
-		i.Start = MinStart
-	}
+
 	return nil
 }
 
@@ -281,7 +314,7 @@ func (i *IndeedPoller) SendResultToKafka(result *ApiSearchResult) {
 		i.Producer.Input() <- &sarama.ProducerMessage{
 			Topic: i.KafkaTopic,
 			Value: sarama.ByteEncoder(bytes),
-			Key:   sarama.StringEncoder(job.GetDateString()),
+			Key:   sarama.StringEncoder(job.JobKey),
 		}
 	}
 }
@@ -290,11 +323,53 @@ func (i *IndeedPoller) ProduceMessages() error {
 	if !i.IsProducer() {
 		return errors.New("poller is not configured to be a producer!")
 	}
-	if i.Interval < 0 {
+	var wg sync.WaitGroup
+	sentValues := make(map[string]string)
+	decrementWaitGroupIfFound := func(enc sarama.Encoder) {
+		data, err := enc.Encode()
+		if err != nil {
+			log.Fatal("couldn't encode passed in sarama.Encoder: ", enc)
+		}
+		key := string(data)
+		contains := sentValues[key]
+		if contains == "" {
+			sentValues[key] = key
+			wg.Done()
+		}
+	}
+	onSuccess := func(successChannel <-chan *sarama.ProducerMessage) {
+		for success := range successChannel {
+			log.Println("successfully sent message to kafka topic: ", success.Topic, success.Key)
+			decrementWaitGroupIfFound(success.Key)
+		}
+	}
+	onError := func(errChannel <-chan *sarama.ProducerError) {
+		for err := range errChannel {
+			log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
+			decrementWaitGroupIfFound(err.Msg.Key)
+		}
+	}
+	err := i.InitWithProducerHandlerFunctions(onSuccess, onError)
+	if err != nil {
+		return err
+	}
+
+	doProduceMessages := func() error {
+		wg.Add(i.Limit)
+		result, err := i.GetMostRecentResult()
+		if err != nil {
+			return err
+		}
+		i.SendResultToKafka(result)
+		wg.Wait()
+		return nil
+	}
+
+	if i.Interval <= 0 {
 		if i.Debug {
 			log.Println("polling is disabled, will only execute once.")
 		}
-		err := i.doProduceMessages()
+		err := doProduceMessages()
 		if err != nil {
 			return err
 		}
@@ -302,39 +377,12 @@ func (i *IndeedPoller) ProduceMessages() error {
 	}
 	t := time.NewTicker(time.Duration(i.Interval) * time.Millisecond)
 	for _ = range t.C {
-		err := i.doProduceMessages()
-        if err != nil {
+		err := doProduceMessages()
+		if err != nil {
 			return err
 		}
+		sentValues = make(map[string]string)
 	}
-    return nil
-}
-
-func (i *IndeedPoller) doProduceMessages() error {
-	var wg sync.WaitGroup
-	wg.Add(i.Limit)
-	onSuccess := func(successChannel <-chan *sarama.ProducerMessage) {
-		for success := range successChannel {
-			log.Println("successfully sent message to kafka topic: ", success.Topic)
-			wg.Done()
-		}
-	}
-	onError := func(errChannel <-chan *sarama.ProducerError) {
-		for err := range errChannel {
-			log.Println("ERROR: failed to send message to kafka: ", err.Err.Error())
-			wg.Done()
-		}
-	}
-	err := i.InitWithProducerHandlerFunctions(onSuccess, onError)
-	if err != nil {
-		return err
-	}
-	result, err := i.GetMostRecentResult()
-	if err != nil {
-		return err
-	}
-	i.SendResultToKafka(result)
-	wg.Wait()
 	return nil
 }
 
@@ -359,50 +407,118 @@ func (i *IndeedPoller) ConsumeMessages() error {
 				if i.EndConsumeOnError {
 					wg.Done()
 				}
-                continue
+				continue
 			}
 			//in order to get as much throughput as possible
 			//the two aws api calls are executed in a different
 			//goroutine than the one the channel is being read with.
-            //TODO: Write and run tests confirming all works...
-			go func(value []byte, result * JobResult) {
-                _, err := s3Svc.PutObject(&s3.PutObjectInput{
-					Bucket: aws.String(i.S3BucketName),
-					Key:    aws.String(result.JobKey),
-                    Body: bytes.NewReader(value),
-				})
-                
-                if err != nil {
-                    log.Println("failed to put job result into s3 bucket: ", i.S3BucketName, err)
-                    if i.EndConsumeOnError {
-                        wg.Done()
-                    }
-                    return
-                }
-                metadata := NewJobResultMetaData(result, i.S3BucketName, value)
-                
-				item, err := dynamodbattribute.ConvertToMap(metadata)
+			//TODO: reformat to prevent wait group panic when more than one error occurrs.
+			go func(msgOffset int64, value []byte, result *JobResult) {
+				var err error
+				for j := 1; j < retryCount; j++ {
+					_, err = s3Svc.PutObject(&s3.PutObjectInput{
+						Bucket:      aws.String(i.S3BucketName),
+						Key:         aws.String(result.JobKey),
+						Body:        bytes.NewReader(value),
+						ContentType: aws.String(fmt.Sprintf("application/%s", i.Format)),
+					})
+					if err == nil {
+						break
+					}
+				}
 				if err != nil {
-					log.Println("unable to convert JobResult to AttributeItem: ", err)
+					log.Println("failed to put job result into s3 bucket: ", i.S3BucketName, err)
 					if i.EndConsumeOnError {
 						wg.Done()
 					}
-                    return
+					return
 				}
-				_, err = dbSvc.PutItem(&dynamodb.PutItemInput{
-					Item:      item,
+				//TODO: Get dynamoattribute convert function working...
+				putItemInput := &dynamodb.PutItemInput{
+					Item: map[string]*dynamodb.AttributeValue{
+						//Minimum required fields as defined by EAT-3
+						"DocumentID": {
+							S: aws.String(result.JobKey),
+						},
+						"Source": {
+							S: aws.String("indeed"),
+						},
+						"Role": {
+							S: aws.String("none"),
+						},
+						"Type": {
+							S: aws.String("job description"),
+						},
+						"FileType": {
+							S: aws.String(fmt.Sprintf("https://s3-%s.amazonaws.com/%s/%s", AWSRegion, i.S3BucketName, result.JobKey)),
+						},
+						//extended metadata for the actual result.
+						"CreateDate": {
+							S: aws.String(result.GetDateString()),
+						},
+						"JobTitle": {
+							S: aws.String(result.JobTitle),
+						},
+						"Company": {
+							S: aws.String(result.Company),
+						},
+						"City": {
+							S: aws.String(result.City),
+						},
+						"State": {
+							S: aws.String(result.State),
+						},
+						"Country": {
+							S: aws.String(result.Country),
+						},
+						"FormattedLocation": {
+							S: aws.String(result.FormattedLocation),
+						},
+						"ResultSource": {
+							S: aws.String(result.Source),
+						},
+						"Snippet": {
+							S: aws.String(result.Snippet),
+						},
+						"Latitude": {
+							N: aws.String(fmt.Sprintf("%f", result.Latitude)),
+						},
+						"Longitude": {
+							N: aws.String(fmt.Sprintf("%f", result.Longitude)),
+						},
+						"Sponsored": {
+							BOOL: aws.Bool(result.Sponsored),
+						},
+						"Expired": {
+							BOOL: aws.Bool(result.Expired),
+						},
+						"FormattedLocationFull": {
+							S: aws.String(result.FormattedLocationFull),
+						},
+						"FormattedRelativeTime": {
+							S: aws.String(result.FormattedRelativeTime),
+						},
+					},
 					TableName: aws.String(i.DynamoDbTableName),
-				})
+				}
+
+				for j := 1; j < retryCount; j++ {
+					_, err = dbSvc.PutItem(putItemInput)
+					if err == nil {
+						break
+					}
+				}
+
 				if err != nil {
 					log.Println("failed to save item to dynamodb: ", err)
 					if i.EndConsumeOnError {
 						wg.Done()
 					}
-                    return
+					return
 				}
-
-			}(msg.Value, result)
-
+				log.Println("Successfully stored jobkey ", result.JobKey, " in table ", i.DynamoDbTableName, " and in bucket ", i.S3BucketName)
+				return
+			}(msg.Offset, msg.Value, result)
 		}
 	}
 	onError := func(errorChannel <-chan *sarama.ConsumerError) {

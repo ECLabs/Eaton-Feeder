@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"encoding/xml"
+	"log"
 	"time"
-    "fmt"
 )
 
 //TODO: Fix json unmarshalling issues.  Current story only calls for XML.
@@ -50,7 +50,7 @@ type JobResult struct {
 }
 
 func (j *JobResult) GetDateString() string {
-	return j.Date.Format(format)
+	return j.Date.Format(indeedApiDateFormat)
 }
 
 //this anonymous struct is needed
@@ -64,17 +64,32 @@ type customTime struct {
 //a given date.  This looks like just a hard coded random date, but it's
 //using the constants defined in the time package defined here:
 // https://golang.org/src/time/format.go
-const format = "Mon, 02 Jan 2006 15:04:05 MST"
+const indeedApiDateFormat = "Mon, 02 Jan 2006 15:04:05 MST"
+const defaultFormat = "2006-01-02T15:04:05Z0700"
 
 func (c *customTime) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
 	text := ""
 	d.DecodeElement(&text, &start)
-	value, err := time.Parse(format, text)
+	value, err := time.Parse(indeedApiDateFormat, text)
 	if err != nil {
-		return err
+		//HACK HACK HACK
+		//There seems to be an issue with the xml marshaller
+		//when writing out job results and will write out
+		//the default format for a date instead of the one outlined
+		//in CustomTime.MarshalXML
+		value, err = time.Parse(defaultFormat, text)
+		if err != nil {
+			return err
+		}
 	}
 	*c = customTime{value}
 	return nil
+}
+
+func (c *customTime) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	text := c.Format(indeedApiDateFormat)
+	log.Println("Encoded date as: ", text)
+	return e.EncodeElement(text, start)
 }
 
 func (c *customTime) UnmarshalJSON(b []byte) error {
@@ -83,27 +98,10 @@ func (c *customTime) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	value, err := time.Parse(format, text)
+	value, err := time.Parse(indeedApiDateFormat, text)
 	if err != nil {
 		return err
 	}
 	*c = customTime{value}
 	return nil
-}
-
-//The type that's stored within the UserID DynamoDB table.
-type JobResultMetaData struct {
-	CreateDate customTime `json:"CreateDate"`
-	JobKey     string     `json:"UserEmail"`
-	RawBytes   string     `json:"UserFile"`
-	Url        string     `json:"Url"`
-}
-
-func NewJobResultMetaData(result * JobResult, bucketName string, resultBytes []byte) * JobResultMetaData{
-    return &JobResultMetaData{
-        Url: fmt.Sprintf("https://s3.amazon.com/%s/%s", bucketName, result.JobKey),
-        JobKey: result.JobKey,
-        RawBytes: string(resultBytes),
-        CreateDate: customTime{time.Now()},
-    }
 }

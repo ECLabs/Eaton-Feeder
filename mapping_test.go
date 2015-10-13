@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/xml"
 	"testing"
+	"time"
 )
 
 var (
@@ -43,6 +44,9 @@ var (
     </results>
 </response>
 `
+	dummyJobResult = `
+<result><jobtitle>Patient Transporter</jobtitle><company>George Washington University hosp.</company><city>Washington</city><state>DC</state><country>US</country><formattedLocation>Washington, DC</formattedLocation><source>Indeed</source><date>Tue, 03 Aug 2010 16:21:00 GMT</date><snippet>Transporting patients to and from there rooms to doctors office and examines. Local candidates only:....</snippet><url>http://www.indeed.com/viewjob?jk=1cdf8d9d5da145f6&amp;qd=3shu1p8wbXm3aC55sNj4oTrLBxYcuXrnq_FHZnNIkdGdIOa58DTxWixnLmUlBYWlg7TZCxYhCgSQP1pdnoFFviS3QsJXL-tCKe4x9bjt7-Y&amp;indpubnum=5347954861571823&amp;atk=1a1gthcac5oskeok</url><onmousedown>indeed_clk(this, &#39;2484&#39;);</onmousedown><latitude>38.892857</latitude><longitude>-77.03297</longitude><jobkey>1cdf8d9d5da145f6</jobkey><sponsored>false</sponsored><expired>false</expired><formattedLocationFull>Washington, DC</formattedLocationFull><formattedRelativeTime>2 days ago</formattedRelativeTime></result>
+`
 )
 
 func TestUnmarshalXML(t *testing.T) {
@@ -60,4 +64,26 @@ func TestUnmarshalXML(t *testing.T) {
 	if list == nil || len(list) != 1 {
 		t.Fatal("job result list is nil or empty!")
 	}
+}
+
+func TestJobResultUnmarshalXML(t *testing.T) {
+	j := new(JobResult)
+	j.Date = customTime{time.Now()}
+	data, err := xml.Marshal(j)
+	if err != nil {
+		t.Fatal("failed to marshal job result: ", err)
+	}
+	j = new(JobResult)
+	err = xml.Unmarshal(data, j)
+
+	if err != nil {
+		t.Fatal("failed to unmarshal job result: ", err)
+	}
+	t.Log("Job Result Date: ", j.Date)
+	err = xml.Unmarshal([]byte(dummyJobResult), j)
+
+	if err != nil {
+		t.Fatal("failed to unmarshal from dummy job result text: ", j)
+	}
+	t.Log("Job Result Date: ", j.Date)
 }
