@@ -54,15 +54,15 @@ func (i *IndeedKafkaProducer) SendMessages(jobResultChannel <-chan JobResult) (<
 	go func() {
 		defer close(errorChannel)
 		defer close(kafkaDoneChannel)
-        defer i.Close()
+		defer i.Close()
 		for jobResult := range jobResultChannel {
-            if jobResult.IsLast() {
-                if Debug {
-                    log.Println("received last jobResult. returning from function.")
-                }
-                kafkaDoneChannel <- 0
-                return
-            }
+			if jobResult.IsLast() {
+				if Debug {
+					log.Println("received last jobResult. returning from function.")
+				}
+				kafkaDoneChannel <- 0
+				return
+			}
 			bytes, err := xml.Marshal(jobResult)
 			if err != nil {
 				errorChannel <- err

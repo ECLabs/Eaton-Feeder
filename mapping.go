@@ -8,7 +8,7 @@ import (
 )
 
 var (
-    finalDummyJobKey = "LAST_ONE_EATON_FEEDER"
+	finalDummyJobKey = "LAST_ONE_EATON_FEEDER"
 )
 
 //TODO: Fix json unmarshalling issues.  Current story only calls for XML.
@@ -54,17 +54,17 @@ type JobResult struct {
 }
 
 func NewLastJobResult() JobResult {
-    j := JobResult{
-        JobKey:finalDummyJobKey,
-    }
-    if !j.IsLast() {
-        panic("intended job result as last but isn't!")
-    }
-    return j
+	j := JobResult{
+		JobKey: finalDummyJobKey,
+	}
+	if !j.IsLast() {
+		panic("intended job result as last but isn't!")
+	}
+	return j
 }
 
-func (j * JobResult) IsLast() bool {
-    return j.JobKey == finalDummyJobKey
+func (j *JobResult) IsLast() bool {
+	return j.JobKey == finalDummyJobKey
 }
 
 func (j *JobResult) GetDateString() string {

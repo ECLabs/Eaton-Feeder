@@ -1,17 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/xml"
+	"errors"
+	"fmt"
 	"github.com/Shopify/sarama"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"log"
-    "errors"
-    "fmt"
-    "bytes"
-    "sync"
+	"sync"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 	retryCount        = 5
 	chosenOffset      = sarama.OffsetOldest
 	offsetType        = "oldest"
-	awsWorkPoolSize   = 25
+	awsWorkPoolSize   = 5
 	S3BucketName      = "eaton-jobdescription-bucket"
 	DynamoDBTableName = "Documents"
 )
@@ -45,7 +45,7 @@ func NewKafkaConsumer() (*IndeedKafkaConsumer, error) {
 	}
 	partitions, err := consumer.Partitions(kafkaTopic)
 	if err != nil {
-		return nil,  err
+		return nil, err
 	}
 	if Debug {
 		log.Println("Returned Partitions for topic: ", kafkaTopic, partitions)
@@ -53,7 +53,7 @@ func NewKafkaConsumer() (*IndeedKafkaConsumer, error) {
 	if len(partitions) == 0 {
 		return nil, errors.New("no partitions returned to consume!")
 	}
-    partitionConsumers := make([]sarama.PartitionConsumer, len(partitions), len(partitions))
+	partitionConsumers := make([]sarama.PartitionConsumer, len(partitions), len(partitions))
 	switch offsetType {
 	case "oldest":
 		chosenOffset = sarama.OffsetOldest
@@ -98,7 +98,7 @@ func (i *IndeedKafkaConsumer) Close() error {
 			return err
 		}
 	}
-    return nil
+	return nil
 }
 
 type AWSWork struct {
@@ -199,7 +199,7 @@ func (a *AWSWork) DoWork() error {
 		return err
 	}
 	log.Println("Successfully stored jobkey ", a.jobResult.JobKey, " in table ", DynamoDBTableName, " and in bucket ", S3BucketName)
-    return nil
+	return nil
 }
 
 func (i *IndeedKafkaConsumer) ConsumeMessages() <-chan error {
@@ -209,7 +209,7 @@ func (i *IndeedKafkaConsumer) ConsumeMessages() <-chan error {
 		workChannel := make(chan AWSWork)
 		defer close(workChannel)
 		for j := 0; j < awsWorkPoolSize; j++ {
-			go func(){
+			go func() {
 				for w := range workChannel {
 					err := w.DoWork()
 					if err != nil {
@@ -218,31 +218,31 @@ func (i *IndeedKafkaConsumer) ConsumeMessages() <-chan error {
 				}
 			}()
 		}
-        var wg sync.WaitGroup
-        wg.Add(len(i.partitionConsumers) * 2)
-        for _, partitionConsumer := range i.partitionConsumers {
-            go func(partitionConsumer sarama.PartitionConsumer){
-                for msg := range partitionConsumer.Messages() {
-                    result := new(JobResult)
-                    err := xml.Unmarshal(msg.Value, result)
-                    if err != nil {
-                        errChannel <- err
-                        continue
-                    }
-                    workChannel <- AWSWork{
-                        jobResult: *result,
-                        msgValue:  msg.Value,
-                    }
-                }
-                wg.Done()
-            }(partitionConsumer)
-            go func(partitionConsumer sarama.PartitionConsumer){
-                for err := range partitionConsumer.Errors() {
-                    errChannel <- err.Err
-                }
-                wg.Done()
-            }(partitionConsumer)
-        }
+		var wg sync.WaitGroup
+		wg.Add(len(i.partitionConsumers) * 2)
+		for _, partitionConsumer := range i.partitionConsumers {
+			go func(partitionConsumer sarama.PartitionConsumer) {
+				for msg := range partitionConsumer.Messages() {
+					result := new(JobResult)
+					err := xml.Unmarshal(msg.Value, result)
+					if err != nil {
+						errChannel <- err
+						continue
+					}
+					workChannel <- AWSWork{
+						jobResult: *result,
+						msgValue:  msg.Value,
+					}
+				}
+				wg.Done()
+			}(partitionConsumer)
+			go func(partitionConsumer sarama.PartitionConsumer) {
+				for err := range partitionConsumer.Errors() {
+					errChannel <- err.Err
+				}
+				wg.Done()
+			}(partitionConsumer)
+		}
 		wg.Wait()
 	}()
 	return errChannel
