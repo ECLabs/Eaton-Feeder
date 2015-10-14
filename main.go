@@ -9,49 +9,36 @@ import (
 )
 
 var (
-	poller = new(IndeedPoller)
-	MyIP   string
-	wg     sync.WaitGroup
-	//Max limit for the indeed api is 25
-	MaxLimit = 25
-	MinLimit = 1
-	MinStart = 0
-	logFile  string
+	logFile   string
+	Debug     = false
+	doConsume = false
+	doProduce = false
+    MyIP string
 )
 
 func main() {
-	flag.StringVar(&poller.BaseUrl, "baseUrl", "http://api.indeed.com/ads/apisearch?", "base url for api.indeed.com")
-	flag.StringVar(&poller.Publisher, "publisher", "", "Publisher ID. This is assigned when you register as a publisher.")
-	flag.StringVar(&poller.Version, "version", "2", "Which version of the API you wish to use. All publishers should be using version 2. Currently available versions are 1 and 2")
-	flag.StringVar(&poller.Format, "format", "xml", "Which output format of the API you wish to use. The options are \"xml\" and \"json\". If omitted or invalid, the XML format is used.")
-	flag.StringVar(&poller.Query, "query", "", "By default terms are ANDed. To see what is possible, use our advanced search page to perform a search and then check the url for the q value.")
-	flag.StringVar(&poller.Location, "location", "", "Use a postal code or a \"city, state/province/region\" combination.")
-	flag.StringVar(&poller.Sort, "sort", "relevance", "Sort by relevance or date.")
-	flag.IntVar(&poller.Radius, "radius", 25, "Distance from search location (\"as the crow flies\").")
-	flag.StringVar(&poller.SiteType, "siteType", "", "To show only jobs from job boards use \"jobsite\". For jobs from direct employer websites use \"employer\".")
-	flag.StringVar(&poller.JobType, "jobType", "fulltime", "Allowed values: \"fulltime\", \"parttime\", \"contract\", \"internship\", \"temporary\".")
-	flag.IntVar(&poller.Start, "start", MinStart, "Start results at this result number, beginning with 0.")
-	flag.IntVar(&poller.Limit, "limit", MaxLimit, "Maximum number of results returned per query.")
-	flag.IntVar(&poller.FromAge, "fromAge", 0, "Number of days back to search.")
-	flag.BoolVar(&poller.HighLight, "highlight", false, "Setting this value to true will bold terms in the snippet that are also present in Query. Default is false.")
-	flag.BoolVar(&poller.Filter, "filter", true, "Filter duplicate results. False turns off duplicate job filtering. Default is true.")
-	flag.BoolVar(&poller.LatLong, "latLong", false, "If latLong=true, returns latitude and longitude information for each job result. Default is false.")
-	flag.StringVar(&poller.Country, "country", "us", "Search within country specified.")
-	flag.StringVar(&poller.Channel, "channel", "", "Channel Name: Group API requests to a specific channel")
-	flag.StringVar(&poller.UserIP, "userIP", GetLocalAddr(), "The IP number of the end-user to whom the job results will be displayed.")
-	flag.StringVar(&poller.UserAgent, "userAgent", "Golang http client", "The User-Agent (browser) of the end-user to whom the job results will be displayed. This can be obtained from the \"User-Agent\" HTTP request header from the end-user.")
-	flag.IntVar(&poller.Interval, "interval", 1000, "interval in millis between each poll (less than 0 will only have it run once). This is ignored if in --consume=true")
-	flag.StringVar(&poller.KafkaAddresses, "kafkaServers", "", "a comma delimited list of host:port values where kafka is running. (ex. 192.168.0.1:9092,192.168.0.2:9092")
-	flag.StringVar(&poller.KafkaTopic, "kafkaTopic", "", "the topic to consume from or produce to.")
-	flag.BoolVar(&poller.Consume, "consume", false, "sets this poller as a consumer (will post data to S3/DynamoDB instead of pulling from indeed API if this is set to true)")
-	flag.BoolVar(&poller.Debug, "debug", false, "set logging level to debug.")
-	flag.StringVar(&poller.S3BucketName, "bucket", "eaton-jobdescription-bucket", "the bucket to store retrieved indeed api messages from.")
-	flag.StringVar(&poller.DynamoDbTableName, "table", "Documents", "the dynamodb table to store the indeed api messages.")
+	flag.StringVar(&S3BucketName, "bucket", "eaton-jobdescription-bucket", "the bucket to store retrieved indeed api messages from.")
+	flag.StringVar(&DynamoDBTableName, "table", "Documents", "the dynamodb table to store the indeed api messages.")
 	flag.StringVar(&logFile, "log", "eaton-feeder.log", "the log file to write results to.")
 	flag.StringVar(&AWSRegion, "region", "us-west-2", "the aws region to use when saving content to dynamodb and s3.")
 	flag.StringVar(&offsetType, "offset", "oldest", "the offset to use. either \"oldest\" or \"newest\" ")
+	flag.BoolVar(&doConsume, "consume", false, "set to true to consume messages from KAFKA_SERVERS and send them to S3/DynamoDB")
+	flag.BoolVar(&doProduce, "produce", false, "set to true to pull from the indeed api and push messages to KAFKA_SERVERS.")
+    flag.IntVar(&interval, "interval", -1, "the time between polls of the indeed api in millis. anything equal to or below 0 disables the interval function.")
+    flag.BoolVar(&Debug, "debug", false, "set to true if more output is needed for testing purposes.")
 	flag.Parse()
-
+    
+    log.Println("Using the following: ")
+    log.Println("\tbucket:\t", S3BucketName)
+    log.Println("\ttable:\t",DynamoDBTableName)
+    log.Println("\tlogFile:\t", logFile)
+    log.Println("\tregion:\t", AWSRegion)
+    log.Println("\toffset:\t", offsetType)
+    log.Println("\tconsume:\t", doConsume)
+    log.Println("\tproduce:\t", doProduce)
+    log.Println("\tinterval:\t", interval)
+    log.Println("\tdebug:\t", Debug)
+    
 	file, err := os.OpenFile(logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatal("failed to create log file: ", err)
@@ -60,26 +47,104 @@ func main() {
 	defer file.Close()
 	log.SetOutput(file)
 
-	if flag.NFlag() == 0 {
+	if !doProduce && !doConsume {
 		flag.PrintDefaults()
 		return
 	}
+	var wg sync.WaitGroup
+    var kafkaConsumer * IndeedKafkaConsumer
+    var kafkaProducer * IndeedKafkaProducer
+    
+	if doProduce {
+        if Debug {
+            log.Println("Creating new IndeedKafkaProducer.")
+        }
+		indeedClient := new(IndeedClient)
+		kafkaProducer, err = NewKafkaProducer()
+		if err != nil {
+			log.Fatal("failed to create new kafka producer: ", err)
+		}
+		errChannel, jobResultChannel := indeedClient.GetResults()
+		kafkaErrChannel, kafkaDoneChannel := kafkaProducer.SendMessages(jobResultChannel)
 
-	err = poller.Validate()
+		wg.Add(1)
+		go func() {
+            if Debug {
+                log.Println("Waiting for messages from the indeedClient error channel...")
+            }
+			for err := range errChannel {
+				log.Println("ERROR - IndeedClient: ", err)
+			}
+            if Debug {
+                log.Println("Finished waiting on messages from the indeedClient error channel.")
+            }
+			wg.Done()
+		}()
 
-	if err != nil {
-		log.Fatal(err)
+		wg.Add(1)
+		go func() {
+            if Debug {
+                log.Println("Waiting on errors from the IndeedKafkaProducer error channel...")
+            }
+			for err := range kafkaErrChannel {
+				log.Println("ERROR - IndeedKafkaProducer: ", err)
+			}
+            if Debug {
+                log.Println("Finished waiting on messages from the IndeedKafkaProducer error channel.")
+            }
+			wg.Done()
+		}()
+
+		wg.Add(1)
+		go func() {
+            if Debug {
+                log.Println("Waiting on done message from the IndeedKafkProducer done signal channel...")
+            }
+			for done := range kafkaDoneChannel {
+				if Debug {
+                    log.Println("DEBUG - IndeedKafkaProducer: completed sending messages to kafka (signal value: ", done, ")")
+				}
+                if kafkaConsumer != nil  {
+                    kafkaConsumer.Close()
+                }
+			}
+            if Debug {
+                log.Println("Finished waiting on done message from IndeedKafkaProducer done signal channel.")
+            }
+			wg.Done()
+		}()
 	}
 
-	if poller.IsProducer() {
-		err = poller.ProduceMessages()
-	} else {
-		err = poller.ConsumeMessages()
+	if doConsume {
+        if Debug {
+            log.Println("Creating new IndeedKafkaConsumer.")
+        }
+		kafkaConsumer, err = NewKafkaConsumer()
+		if err != nil {
+			log.Fatal("failed to create new kafka consumer: ", err)
+		}
+		errChannel := kafkaConsumer.ConsumeMessages()
+		wg.Add(1)
+		go func() {
+            if Debug {
+                log.Println("Waiting on errors from the IndeedKafkaConsumer error channel...")
+            }
+			for err := range errChannel {
+				log.Println("ERROR - IndeedKafkaConsumer: ", err)
+			}
+            if Debug {
+                log.Println("Finished waiting on errors from the IndeedKafkaConsumer error channel.")
+            }
+			wg.Done()
+		}()
 	}
-
-	if err != nil {
-		log.Fatal("failed to run poller: ", err)
-	}
+    if Debug {
+        log.Println("Waiting for producers/consumers to complete so the main function can exit...")
+    }
+	wg.Wait()
+    if Debug {
+        log.Println("Main function has completed.  Exiting program.")
+    }
 }
 
 func GetLocalAddr() string {

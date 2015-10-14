@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+var (
+    finalDummyJobKey = "LAST_ONE_EATON_FEEDER"
+)
+
 //TODO: Fix json unmarshalling issues.  Current story only calls for XML.
 type ApiSearchResult struct {
 	XMLName      xml.Name   `xml:"response" json:"-"`
@@ -47,6 +51,20 @@ type JobResult struct {
 	Expired               bool       `xml:"expired" json:"expired"`
 	FormattedLocationFull string     `xml:"formattedLocationFull" json:"formattedLocationFull"`
 	FormattedRelativeTime string     `xml:"formattedRelativeTime" json:"formattedRelativeTime"`
+}
+
+func NewLastJobResult() JobResult {
+    j := JobResult{
+        JobKey:finalDummyJobKey,
+    }
+    if !j.IsLast() {
+        panic("intended job result as last but isn't!")
+    }
+    return j
+}
+
+func (j * JobResult) IsLast() bool {
+    return j.JobKey == finalDummyJobKey
 }
 
 func (j *JobResult) GetDateString() string {
