@@ -64,13 +64,13 @@ func main() {
 			log.Println("Creating new IndeedKafkaProducer.")
 		}
 		indeedClient := new(IndeedClient)
-        indeedScraper := new(IndeedScraper)
+		indeedScraper := new(IndeedScraper)
 		kafkaProducer, err = NewKafkaProducer()
 		if err != nil {
 			log.Fatal("failed to create new kafka producer: ", err)
 		}
 		errChannel, jobResultChannel := indeedClient.GetResults()
-        scraperErrChannel, scraperJobResultChannel := indeedScraper.GetFullJobSummary(jobResultChannel)
+		scraperErrChannel, scraperJobResultChannel := indeedScraper.GetFullJobSummary(jobResultChannel)
 		kafkaErrChannel, kafkaDoneChannel := kafkaProducer.SendMessages(scraperJobResultChannel)
 
 		wg.Add(1)
@@ -119,20 +119,20 @@ func main() {
 			}
 			wg.Done()
 		}()
-        
-        wg.Add(1)
-        go func(){
-            if Debug {
-                log.Println("Waiting on errors from the IndeedScraper error channel...")
-            }
-            for err := range scraperErrChannel {
-                log.Println("ERROR - IndeedScraper: ", err)
-            }
-            if Debug {
-                log.Println("Finshed waiting on messages from the indeed scraper error channel.")
-            }
-            wg.Done()
-        }()
+
+		wg.Add(1)
+		go func() {
+			if Debug {
+				log.Println("Waiting on errors from the IndeedScraper error channel...")
+			}
+			for err := range scraperErrChannel {
+				log.Println("ERROR - IndeedScraper: ", err)
+			}
+			if Debug {
+				log.Println("Finshed waiting on messages from the indeed scraper error channel.")
+			}
+			wg.Done()
+		}()
 	}
 
 	if doConsume {
