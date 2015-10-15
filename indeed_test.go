@@ -6,6 +6,7 @@ import (
 
 func TestIndeedClientPipeline(t *testing.T) {
 	i := new(IndeedClient)
+    scraper := new(IndeedScraper)
 	k, err := NewKafkaProducer()
 	if err != nil {
 		t.Fatal("failed to create new kafka producer: ", err)
@@ -24,7 +25,8 @@ func TestIndeedClientPipeline(t *testing.T) {
 	}()
 
 	errChannel, jobResultChannel := i.GetResults()
-	kafkaErrChannel, kafkaDoneChannel := k.SendMessages(jobResultChannel)
+    scraperErrChannel, scraperJobResultChannel := scraper.GetFullJobSummary(jobResultChannel)
+	kafkaErrChannel, kafkaDoneChannel := k.SendMessages(scraperJobResultChannel)
 	go func() {
 		for err := range errChannel {
 			t.Fatal("ERROR: ", err)
@@ -38,14 +40,26 @@ func TestIndeedClientPipeline(t *testing.T) {
 	}()
 
 	go func() {
-		for jobResult := range jobResultChannel {
+		for jobResult := range scraperJobResultChannel {
 			t.Log("Received JobResult: ", jobResult.JobKey)
 			if jobResult.IsLast() {
 				t.Log("and that was the last job result!")
 			}
 		}
 	}()
-
+    
+    go func(){
+        for err := range scraperErrChannel {
+            t.Fatal("scraper error: ", err)
+        }
+    }()
+    
+    go func(){
+        for jobResult := range jobResultChannel {
+            t.Log("jobResult: ", jobResult)
+        }
+    }()
+    
 	for kafkaDone := range kafkaDoneChannel {
 		t.Log("finished sending to kafka!", kafkaDone)
 	}

@@ -51,6 +51,7 @@ type JobResult struct {
 	Expired               bool       `xml:"expired" json:"expired"`
 	FormattedLocationFull string     `xml:"formattedLocationFull" json:"formattedLocationFull"`
 	FormattedRelativeTime string     `xml:"formattedRelativeTime" json:"formattedRelativeTime"`
+	FullJobSummary        string     `xml:"fullJobSummary"`
 }
 
 func NewLastJobResult() JobResult {

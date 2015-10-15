@@ -122,6 +122,9 @@ func (a *AWSWork) DoWork() error {
 	if err != nil {
 		return err
 	}
+    if a.jobResult.FullJobSummary != "" {
+        log.Println("JobKey with FullSummary: ", a.jobResult.JobKey)
+    }
 	putItemInput := &dynamodb.PutItemInput{
 		Item: map[string]*dynamodb.AttributeValue{
 			//Minimum required fields as defined by EAT-3
@@ -186,6 +189,9 @@ func (a *AWSWork) DoWork() error {
 			"FormattedRelativeTime": {
 				S: aws.String(a.jobResult.FormattedRelativeTime),
 			},
+            "FullJobSummary":{
+                S: aws.String(a.jobResult.FullJobSummary),
+            },
 		},
 		TableName: aws.String(DynamoDBTableName),
 	}
