@@ -27,7 +27,7 @@ func main() {
 	flag.IntVar(&interval, "interval", -1, "the time between polls of the indeed api in millis. anything equal to or below 0 disables the interval function.")
 	flag.BoolVar(&Debug, "debug", false, "set to true if more output is needed for testing purposes.")
 	flag.IntVar(&awsWorkPoolSize, "awsWorkPoolSize", 5, "the number of concurrent requests allowed when storing information in S3/DynamoDB")
-	flag.IntVar(&requestPoolSize, "indeedRequestPoolSize", 10, "the number of concurrent requests allowed when pulling information from the indeed api.")
+	flag.IntVar(&requestPoolSize, "indeedRequestPoolSize", 5, "the number of concurrent requests allowed when pulling information from the indeed api.")
 	flag.Parse()
 
 	log.Println("Using the following: ")
@@ -64,12 +64,14 @@ func main() {
 			log.Println("Creating new IndeedKafkaProducer.")
 		}
 		indeedClient := new(IndeedClient)
+        indeedScraper := new(IndeedScraper)
 		kafkaProducer, err = NewKafkaProducer()
 		if err != nil {
 			log.Fatal("failed to create new kafka producer: ", err)
 		}
 		errChannel, jobResultChannel := indeedClient.GetResults()
-		kafkaErrChannel, kafkaDoneChannel := kafkaProducer.SendMessages(jobResultChannel)
+        scraperErrChannel, scraperJobResultChannel := indeedScraper.GetFullJobSummary(jobResultChannel)
+		kafkaErrChannel, kafkaDoneChannel := kafkaProducer.SendMessages(scraperJobResultChannel)
 
 		wg.Add(1)
 		go func() {
@@ -117,6 +119,20 @@ func main() {
 			}
 			wg.Done()
 		}()
+        
+        wg.Add(1)
+        go func(){
+            if Debug {
+                log.Println("Waiting on errors from the IndeedScraper error channel...")
+            }
+            for err := range scraperErrChannel {
+                log.Println("ERROR - IndeedScraper: ", err)
+            }
+            if Debug {
+                log.Println("Finshed waiting on messages from the indeed scraper error channel.")
+            }
+            wg.Done()
+        }()
 	}
 
 	if doConsume {

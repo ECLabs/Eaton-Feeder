@@ -9,7 +9,7 @@ import (
 )
 
 var (
-    indeedScrapePoolSize = 10
+    indeedScrapePoolSize = 5
 )
     
 type IndeedScraper struct {

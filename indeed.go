@@ -33,7 +33,7 @@ var (
 	constantValues, queryError = query.Values(indeedConstants)
 	encodedConstants           = constantValues.Encode()
 	maxLimit                   = 25
-	requestPoolSize            = 10
+	requestPoolSize            = 5
 	interval                   = -1
 )
 
