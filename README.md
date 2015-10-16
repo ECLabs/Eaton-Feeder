@@ -4,9 +4,11 @@ Application(s) for reading information from external feeds, initially the Indeed
 
 You'll need to follow the instructions here for installing go: https://golang.org/doc/install
 
+You will also need kafka servers running for the program to interact with.  You can get kafka quickly started by following the instructions here: http://kafka.apache.org/documentation.html#quickstart
+
 Git is also required to pull down the code.
 
-Once you have both installed (with your GOPATH set), just run:
+Once you have everything installed (with your GOPATH set), just run:
 
 ```sh
 $ go get github.com/ECLabs/Eaton-Feeder
