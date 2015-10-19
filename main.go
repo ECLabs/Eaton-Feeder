@@ -27,7 +27,8 @@ func main() {
 	flag.IntVar(&interval, "interval", -1, "the time between polls of the indeed api in millis. anything equal to or below 0 disables the interval function.")
 	flag.BoolVar(&Debug, "debug", false, "set to true if more output is needed for testing purposes.")
 	flag.IntVar(&awsWorkPoolSize, "awsWorkPoolSize", 5, "the number of concurrent requests allowed when storing information in S3/DynamoDB")
-	flag.IntVar(&requestPoolSize, "indeedRequestPoolSize", 5, "the number of concurrent requests allowed when pulling information from the indeed api.")
+	flag.IntVar(&requestPoolSize, "indeedRequestPoolSize", 1, "the number of concurrent requests allowed when pulling information from the indeed api.")
+	flag.IntVar(&indeedScrapePoolSize, "indeedScraperPoolSize", 1, "the number of concurrent requests allowed when scraping information from the indeed site.")
 	flag.Parse()
 
 	log.Println("Using the following: ")
