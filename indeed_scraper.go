@@ -19,7 +19,7 @@ type indeedScraperWorker struct {
 	jobResult JobResult
 }
 
-func (i *indeedScraperWorker) doGetFullJobSumary(jobResultChannel chan JobResult) error {
+func (i *indeedScraperWorker) doGetFullJobSumary(output chan JobResult) error {
 	indeedUrl, err := url.Parse(i.jobResult.Url)
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func (i *indeedScraperWorker) doGetFullJobSumary(jobResultChannel chan JobResult
 		return errors.New(fmt.Sprintf("couldn't find full summary for jobKey: %s", i.jobResult.JobKey))
 	}
 	i.jobResult.FullJobSummary = fullSummary
-	jobResultChannel <- i.jobResult
+	output <- i.jobResult
 	return nil
 }
 
@@ -54,9 +54,7 @@ func (i *IndeedScraper) GetFullJobSummary(input <-chan JobResult) (<-chan error,
 	go func() {
 		workChannel := make(chan indeedScraperWorker)
 		var wg sync.WaitGroup
-		defer func() {
-			close(workChannel)
-			wg.Wait()
+        defer func() {
 			close(errChannel)
 			close(output)
 		}()
@@ -64,7 +62,7 @@ func (i *IndeedScraper) GetFullJobSummary(input <-chan JobResult) (<-chan error,
 			wg.Add(1)
 			go func() {
 				for w := range workChannel {
-					err := w.doGetFullJobSumary(output)
+                    err := w.doGetFullJobSumary(output)
 					if err != nil {
 						errChannel <- err
 					}
@@ -73,14 +71,17 @@ func (i *IndeedScraper) GetFullJobSummary(input <-chan JobResult) (<-chan error,
 			}()
 		}
 		for jobResult := range input {
-			if jobResult.IsLast() {
-				output <- jobResult
+            if jobResult.IsLast() {
+                close(workChannel)
+                wg.Wait()
+                output <- jobResult
 				return
 			}
 			workChannel <- indeedScraperWorker{
 				jobResult: jobResult,
 			}
 		}
+        
 	}()
 	return errChannel, output
 }
