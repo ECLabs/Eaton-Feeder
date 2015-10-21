@@ -1,13 +1,13 @@
 package ipresolver
 
 import (
-    "net"
-    "log"
-    "os"
+	"log"
+	"net"
+	"os"
 )
 
 var (
-    MyIP = ""
+	MyIP = ""
 )
 
 func GetLocalAddr() string {

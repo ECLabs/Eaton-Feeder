@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
-    eatonevents "github.com/ECLabs/Eaton-Feeder/events"
+	eatonevents "github.com/ECLabs/Eaton-Feeder/events"
 	"log"
 	"os"
-    "fmt"
 )
 
 var (
@@ -55,11 +55,11 @@ func main() {
 		log.Fatal("ERROR - Cannot both produce and consume in a single application!")
 	}
 
-    err = eatonevents.Init()
-    if err != nil {
-        log.Fatal("ERROR - failed to create event publisher!")
-    }
-    
+	err = eatonevents.Init()
+	if err != nil {
+		log.Fatal("ERROR - failed to create event publisher!")
+	}
+
 	var kafkaConsumer *IndeedKafkaConsumer
 	var kafkaProducer *IndeedKafkaProducer
 
@@ -72,18 +72,18 @@ func main() {
 		kafkaProducer, err = NewKafkaProducer()
 		if err != nil {
 			eatonevents.Error("failed to create new kafka producer: ", err)
-            os.Exit(1)
+			os.Exit(1)
 		}
 		errChannel, jobResultChannel := indeedClient.GetResults()
 		scraperErrChannel, scraperJobResultChannel := indeedScraper.GetFullJobSummary(jobResultChannel)
 		kafkaErrChannel, kafkaDoneChannel := kafkaProducer.SendMessages(scraperJobResultChannel)
 
 		go func() {
-            eatonevents.Debug("Waiting for messages from the indeedClient error channel...")
-            for err := range errChannel {
-                eatonevents.Error("IndeedClient: ", err)
-            }
-            eatonevents.Debug("Finished waiting on messages from the indeedClient error channel.")
+			eatonevents.Debug("Waiting for messages from the indeedClient error channel...")
+			for err := range errChannel {
+				eatonevents.Error("IndeedClient: ", err)
+			}
+			eatonevents.Debug("Finished waiting on messages from the indeedClient error channel.")
 		}()
 		go func() {
 			eatonevents.Debug("Waiting on errors from the IndeedKafkaProducer error channel...")
@@ -113,13 +113,13 @@ func main() {
 		kafkaConsumer, err = NewKafkaConsumer()
 		if err != nil {
 			eatonevents.Error("failed to create new kafka consumer: ", err)
-            os.Exit(1)
+			os.Exit(1)
 		}
 		errChannel := kafkaConsumer.ConsumeMessages()
 		for err := range errChannel {
 			eatonevents.Error("IndeedKafkaConsumer: ", err)
 		}
 	}
-	
-    eatonevents.Info("Main function has completed.  Exiting program.")
+
+	eatonevents.Info("Main function has completed.  Exiting program.")
 }

@@ -2,10 +2,10 @@ package events
 
 import (
 	"encoding/xml"
+	eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
+	eatonconsumer "github.com/ECLabs/Eaton-Feeder/consumer"
+	"github.com/ECLabs/Eaton-Feeder/mapping"
 	"github.com/Shopify/sarama"
-    "github.com/ECLabs/Eaton-Feeder/mapping"
-    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
-    eatonconsumer "github.com/ECLabs/Eaton-Feeder/consumer"
 	"sync"
 )
 

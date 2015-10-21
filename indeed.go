@@ -69,7 +69,7 @@ func (i *IndeedClient) getIndeedResultPage(start int) (*mapping.ApiSearchResult,
 	buffer.WriteString("&limit=")
 	buffer.WriteString(fmt.Sprintf("%d", maxLimit))
 	myUrl := buffer.String()
-    eatonevents.Debug(fmt.Sprintf("Getting url %s", myUrl))
+	eatonevents.Debug(fmt.Sprintf("Getting url %s", myUrl))
 	resp, err := http.Get(myUrl)
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (i *IndeedClient) getIndeedResultPage(start int) (*mapping.ApiSearchResult,
 		return nil, err
 	}
 	if apiSearchResult.Start != (start + 1) {
-		return nil, errors.New(fmt.Sprintf("indeed search returned incorrect offset. expected %d but received %d", start + 1, apiSearchResult.Start))
+		return nil, errors.New(fmt.Sprintf("indeed search returned incorrect offset. expected %d but received %d", start+1, apiSearchResult.Start))
 	}
 	return apiSearchResult, nil
 }

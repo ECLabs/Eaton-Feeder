@@ -2,12 +2,12 @@ package main
 
 import (
 	"encoding/xml"
+	"fmt"
+	eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
+	eatonevents "github.com/ECLabs/Eaton-Feeder/events"
+	"github.com/ECLabs/Eaton-Feeder/ipresolver"
+	"github.com/ECLabs/Eaton-Feeder/mapping"
 	"github.com/Shopify/sarama"
-    "github.com/ECLabs/Eaton-Feeder/ipresolver"
-    "github.com/ECLabs/Eaton-Feeder/mapping"
-    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
-    eatonevents "github.com/ECLabs/Eaton-Feeder/events"
-    "fmt"
 )
 
 type IndeedKafkaProducer struct {
@@ -63,8 +63,8 @@ func (i *IndeedKafkaProducer) SendMessages(jobResultChannel <-chan mapping.JobRe
 				errorChannel <- err
 				continue
 			}
-            
-            eatonevents.Debug(fmt.Sprintf("Sending JobResult JobKey: %s", jobResult.JobKey))
+
+			eatonevents.Debug(fmt.Sprintf("Sending JobResult JobKey: %s", jobResult.JobKey))
 			i.producer.Input() <- &sarama.ProducerMessage{
 				Topic: eatonconfig.KafkaTopic,
 				Value: sarama.ByteEncoder(bytes),

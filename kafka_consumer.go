@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
+	eatonconsumer "github.com/ECLabs/Eaton-Feeder/consumer"
+	eatonevents "github.com/ECLabs/Eaton-Feeder/events"
+	"github.com/ECLabs/Eaton-Feeder/mapping"
 	"github.com/Shopify/sarama"
-    eatonconsumer "github.com/ECLabs/Eaton-Feeder/consumer"
-    eatonevents "github.com/ECLabs/Eaton-Feeder/events"
-    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
-    "github.com/ECLabs/Eaton-Feeder/mapping"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -34,8 +34,6 @@ type IndeedKafkaConsumer struct {
 	consumer           sarama.Consumer
 	partitionConsumers []sarama.PartitionConsumer
 }
-
-
 
 func NewKafkaConsumer() (*IndeedKafkaConsumer, error) {
 	consumer, partitionConsumers, err := eatonconsumer.NewSaramaConsumers(eatonconfig.KafkaServers, eatonconfig.KafkaTopic, eatonconfig.OffsetType)
@@ -165,11 +163,11 @@ func (a *AWSWork) DoWork() error {
 	if err != nil {
 		return err
 	}
-    msg := fmt.Sprintf("Successfully stored jobkey %s in table %s and in bucket %s", a.jobResult.JobKey, DynamoDBTableName, S3BucketName)
-    err = eatonevents.Info(msg)
-    if err != nil {
-        return err
-    }
+	msg := fmt.Sprintf("Successfully stored jobkey %s in table %s and in bucket %s", a.jobResult.JobKey, DynamoDBTableName, S3BucketName)
+	err = eatonevents.Info(msg)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

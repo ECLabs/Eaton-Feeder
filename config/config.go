@@ -1,34 +1,34 @@
 package config
 
 import (
-    "os"
-    "strings"
+	"os"
+	"strings"
 )
 
 var (
-    KafkaServers = GetDefaultKafkaServers()
-	KafkaTopic   = GetDefaultKafkaTopic()
-    KafkaLoggerTopic = GetDefaultKafkaLoggerTopic()
-    OffsetType = "newest"
-    Debug = false
-    parsed = false
+	KafkaServers     = GetDefaultKafkaServers()
+	KafkaTopic       = GetDefaultKafkaTopic()
+	KafkaLoggerTopic = GetDefaultKafkaLoggerTopic()
+	OffsetType       = "newest"
+	Debug            = false
+	parsed           = false
 )
 
-func IsDebug()bool{
-    if parsed  {
-        return Debug
-    }
-    val := os.Getenv("DEBUG")
-    Debug = val == "true"
-    parsed = true
-    return Debug
+func IsDebug() bool {
+	if parsed {
+		return Debug
+	}
+	val := os.Getenv("DEBUG")
+	Debug = val == "true"
+	parsed = true
+	return Debug
 }
-func GetDefaultKafkaServers()[]string{
-    val := os.Getenv("KAFKA_SERVERS")
-    if val == "" {
-        val = "127.0.0.1:9092"
-    }
-    return strings.Split(val, ",")
+func GetDefaultKafkaServers() []string {
+	val := os.Getenv("KAFKA_SERVERS")
+	if val == "" {
+		val = "127.0.0.1:9092"
+	}
+	return strings.Split(val, ",")
 }
 
 func GetDefaultKafkaTopic() string {

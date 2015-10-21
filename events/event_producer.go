@@ -3,27 +3,27 @@ package events
 import (
 	"encoding/xml"
 	"fmt"
+	eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
+	"github.com/ECLabs/Eaton-Feeder/ipresolver"
+	"github.com/ECLabs/Eaton-Feeder/mapping"
 	"github.com/Shopify/sarama"
+	"log"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
-    "github.com/ECLabs/Eaton-Feeder/ipresolver"
-    "github.com/ECLabs/Eaton-Feeder/mapping"
-    "log"
-    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
 )
 
 const (
-    ErrorLevel = "error"
-    InfoLevel = "info"
-    DebugLevel = "debug"
-    TraceLevel = "trace"
-    UnknownCaller = "LOG"
+	ErrorLevel    = "error"
+	InfoLevel     = "info"
+	DebugLevel    = "debug"
+	TraceLevel    = "trace"
+	UnknownCaller = "LOG"
 )
 
 var (
-	eventPublisher   *EventPublisher
+	eventPublisher *EventPublisher
 )
 
 type EventPublisher struct {
@@ -43,20 +43,20 @@ func NewEventPublisher() (*EventPublisher, error) {
 	if err != nil {
 		return nil, err
 	}
-    if config.Producer.Return.Successes{
-        go func(){
-            for msg := range asyncProducer.Successes() {
-                log.Println("Sent Message to logs: ", msg.Key)
-            }
-        }()
-    }
-    if config.Producer.Return.Errors {
-        go func(){
-            for err := range asyncProducer.Errors(){
-                log.Println("failed to send message to logs: ", err.Error())
-            }
-        }()
-    }
+	if config.Producer.Return.Successes {
+		go func() {
+			for msg := range asyncProducer.Successes() {
+				log.Println("Sent Message to logs: ", msg.Key)
+			}
+		}()
+	}
+	if config.Producer.Return.Errors {
+		go func() {
+			for err := range asyncProducer.Errors() {
+				log.Println("failed to send message to logs: ", err.Error())
+			}
+		}()
+	}
 	return &EventPublisher{
 		producer: asyncProducer,
 	}, nil
@@ -82,34 +82,34 @@ func GetCallingFunctionName(path string, line int, ok bool) string {
 }
 
 func Init() error {
-    if eventPublisher != nil {
-        return nil
-    }
-    p, err := NewEventPublisher()
-    if err != nil {
-        return err
-    }
-    eventPublisher = p
-    return nil
+	if eventPublisher != nil {
+		return nil
+	}
+	p, err := NewEventPublisher()
+	if err != nil {
+		return err
+	}
+	eventPublisher = p
+	return nil
 }
 
 func Error(msg string, err error) error {
-    if err != nil {
-        msg = fmt.Sprintf("%s %s", msg, err.Error())
-    }
-    return eventPublisher.doPublish(2, msg, ErrorLevel)
+	if err != nil {
+		msg = fmt.Sprintf("%s %s", msg, err.Error())
+	}
+	return eventPublisher.doPublish(2, msg, ErrorLevel)
 }
 
-func Info(msg string) error{
-    return eventPublisher.doPublish(2, msg, InfoLevel)
+func Info(msg string) error {
+	return eventPublisher.doPublish(2, msg, InfoLevel)
 }
 
-func Debug(msg string)error{
-    return eventPublisher.doPublish(2, msg, DebugLevel)
+func Debug(msg string) error {
+	return eventPublisher.doPublish(2, msg, DebugLevel)
 }
 
-func Trace(msg string)error{
-    return eventPublisher.doPublish(2, msg, TraceLevel)
+func Trace(msg string) error {
+	return eventPublisher.doPublish(2, msg, TraceLevel)
 }
 
 func (e *EventPublisher) PublishError(msg string) error {
@@ -128,20 +128,20 @@ func (e *EventPublisher) PublishTrace(msg string) error {
 	return e.doPublish(2, msg, TraceLevel)
 }
 
-func Close()error{
-    if eventPublisher != nil {
-        err := eventPublisher.Close()
-        if err != nil {
-            return err
-        }
-        eventPublisher = nil
-    }
-    return nil
+func Close() error {
+	if eventPublisher != nil {
+		err := eventPublisher.Close()
+		if err != nil {
+			return err
+		}
+		eventPublisher = nil
+	}
+	return nil
 }
 
 func (e *EventPublisher) doPublish(skip int, msg, level string) error {
-    msg = fmt.Sprintf("%s - %s", strings.ToUpper(level), msg)
-    log.Println(msg)    
+	msg = fmt.Sprintf("%s - %s", strings.ToUpper(level), msg)
+	log.Println(msg)
 	//0 would be the function calling the Caller.
 	//1 would be the function calling doPublish.
 	//2 is the function calling the function calling doPublish
@@ -151,18 +151,18 @@ func (e *EventPublisher) doPublish(skip int, msg, level string) error {
 		Message: msg,
 		Date:    time.Now(),
 		Logger:  GetCallingFunctionName(path, line, ok),
-        Address: ipresolver.GetLocalAddr(),
+		Address: ipresolver.GetLocalAddr(),
 	}
 	if ok {
 		a.Path = path
 		a.Line = line
 	}
-    err := e.PublishEvent(a)
-    if err != nil {
-        log.Println("ERROR - failed to publish msg to kafka servers: ", err)
-        return err
-    }
-    return nil
+	err := e.PublishEvent(a)
+	if err != nil {
+		log.Println("ERROR - failed to publish msg to kafka servers: ", err)
+		return err
+	}
+	return nil
 }
 
 func (e *EventPublisher) PublishEvent(msg *mapping.ApplicationEvent) error {

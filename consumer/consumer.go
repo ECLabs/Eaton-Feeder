@@ -1,14 +1,13 @@
 package consumer
 
 import (
-    "log"
-    "github.com/ECLabs/Eaton-Feeder/ipresolver"
-    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
-    "github.com/Shopify/sarama"
-    "errors"
+	"errors"
+	eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
+	"github.com/ECLabs/Eaton-Feeder/ipresolver"
+	"github.com/Shopify/sarama"
+	"log"
 )
 
-    
 func NewSaramaConsumers(servers []string, topic, offsetType string) (*sarama.Consumer, *[]sarama.PartitionConsumer, error) {
 	config := sarama.NewConfig()
 	config.ClientID = ipresolver.GetLocalAddr()
@@ -28,7 +27,7 @@ func NewSaramaConsumers(servers []string, topic, offsetType string) (*sarama.Con
 		return nil, nil, errors.New("no partitions returned to consume!")
 	}
 	partitionConsumers := make([]sarama.PartitionConsumer, len(partitions), len(partitions))
-    chosenOffset := sarama.OffsetOldest
+	chosenOffset := sarama.OffsetOldest
 	switch offsetType {
 	case "oldest":
 		chosenOffset = sarama.OffsetOldest

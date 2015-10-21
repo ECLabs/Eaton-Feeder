@@ -3,15 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/ECLabs/Eaton-Feeder/mapping"
 	"github.com/PuerkitoBio/goquery"
 	"net/url"
-    "github.com/ECLabs/Eaton-Feeder/mapping"
 )
 
 type IndeedScraper struct {
 }
 
-func (i *IndeedScraper) doGetFullJobSumary(jobResult mapping.JobResult) (* mapping.JobResult, error) {
+func (i *IndeedScraper) doGetFullJobSumary(jobResult mapping.JobResult) (*mapping.JobResult, error) {
 	indeedUrl, err := url.Parse(jobResult.Url)
 	if err != nil {
 		return nil, err
@@ -43,23 +43,23 @@ func (i *IndeedScraper) GetFullJobSummary(input <-chan mapping.JobResult) (<-cha
 	errChannel := make(chan error)
 	output := make(chan mapping.JobResult)
 	go func() {
-        defer func() {
+		defer func() {
 			close(errChannel)
 			close(output)
 		}()
 		for jobResult := range input {
-            if jobResult.IsLast() {
-                output <- jobResult
+			if jobResult.IsLast() {
+				output <- jobResult
 				return
 			}
-            jr, err := i.doGetFullJobSumary(jobResult)
-            if err != nil {
-                errChannel <- err
-                continue
-            }
-            output <- *jr
+			jr, err := i.doGetFullJobSumary(jobResult)
+			if err != nil {
+				errChannel <- err
+				continue
+			}
+			output <- *jr
 		}
-        
+
 	}()
 	return errChannel, output
 }
