@@ -9,7 +9,7 @@
     <meta name="author" content="">
     <link rel="icon" href="/favicon.ico">
 
-    <title>Eaton-Feeder</title>
+    <title>Eaton-Feeder-Logs</title>
 
     <!-- Bootstrap core CSS -->
     <link href="css/bootstrap.min.css" rel="stylesheet">
@@ -35,22 +35,22 @@
             <span class="icon-bar"></span>
             <span class="icon-bar"></span>
           </button>
-          <a class="navbar-brand" href="#">Eaton-Feeder</a>
+          <a class="navbar-brand" href="#">Eaton-Feeder-Logs</a>
         </div>
         <div id="navbar" class="collapse navbar-collapse">
           <ul class="nav navbar-nav">
+              <li><a href="#" data-bind="click: function(){ showError(!showError()) }"><label class="inline-label" for="error">Error</label><input data-bind="checked: showError" id="error" type="checkbox"></a></li>
+              <li><a href="#" data-bind="click: function(){ showInfo(!showInfo()) }"><label class="inline-label" for="info">Info</label><input data-bind="checked: showInfo" id="info" type="checkbox"></a></li>
+              <li><a href="#" data-bind="click: function(){ showDebug(!showDebug()) }"><label class="inline-label" for="debug">Debug</label><input data-bind="checked: showDebug" id="debug" type="checkbox"></a></li>
+              <li><a href="#" data-bind="click: function(){ showTrace(!showTrace()) }"><label class="inline-label" for="trace">Trace</label><input data-bind="checked: showTrace" id="trace" type="checkbox"></a></li>
           </ul>
+        <p class="navbar-text navbar-right">Total Logs Received: <span data-bind="text: count"></a></p>
         </div><!--/.nav-collapse -->
       </div>
     </nav>
 
-    <div class="container">
-
-      <div class="starter-template">
-        <h1>Bootstrap starter template</h1>
-        <p class="lead">Use this document as a way to quickly start any new project.<br> All you get is this text and a mostly barebones HTML document.</p>
-      </div>
-
+    <div id="log" class="container" data-bind="foreach: logs">
+        <div data-bind="visible: isVisible, text: Message"></div>
     </div><!-- /.container -->
 
 
@@ -61,6 +61,7 @@
     <script src="js/bootstrap.min.js"></script>
     <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
     <script src="js/ie10-viewport-bug-workaround.js"></script>
+    <script src="js/knockout-3.3.0.js"></script>
     <script src="js/app.js"></script>
   </body>
 </html>

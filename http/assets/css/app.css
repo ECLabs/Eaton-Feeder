@@ -5,3 +5,14 @@ body {
   padding: 40px 15px;
   text-align: center;
 }
+
+#log {
+    background: white;
+    margin: 0;
+    padding: 0.5em 0.5em 0.5em 0.5em;
+    overflow: scroll;
+}
+
+.inline-label {
+    margin-right: 1em;
+}
