@@ -5,32 +5,24 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"net/url"
-	"sync"
-)
-
-var (
-	indeedScrapePoolSize = 5
+    "github.com/ECLabs/Eaton-Feeder/mapping"
 )
 
 type IndeedScraper struct {
 }
 
-type indeedScraperWorker struct {
-	jobResult JobResult
-}
-
-func (i *indeedScraperWorker) doGetFullJobSumary(output chan JobResult) error {
-	indeedUrl, err := url.Parse(i.jobResult.Url)
+func (i *IndeedScraper) doGetFullJobSumary(jobResult mapping.JobResult) (* mapping.JobResult, error) {
+	indeedUrl, err := url.Parse(jobResult.Url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if indeedUrl.Host != "www.indeed.com" {
-		return errors.New(fmt.Sprintf("unknown job summary host: %s", indeedUrl.Host))
+		return nil, errors.New(fmt.Sprintf("unknown job summary host: %s", indeedUrl.Host))
 	}
 
-	doc, err := goquery.NewDocument(i.jobResult.Url)
+	doc, err := goquery.NewDocument(jobResult.Url)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var findErr error
 	fullSummary := ""
@@ -38,48 +30,34 @@ func (i *indeedScraperWorker) doGetFullJobSumary(output chan JobResult) error {
 		fullSummary, findErr = s.Html()
 	})
 	if findErr != nil {
-		return findErr
+		return nil, findErr
 	}
 	if fullSummary == "" {
-		return errors.New(fmt.Sprintf("couldn't find full summary for jobKey: %s", i.jobResult.JobKey))
+		return nil, errors.New(fmt.Sprintf("couldn't find full summary for jobKey: %s", jobResult.JobKey))
 	}
-	i.jobResult.FullJobSummary = fullSummary
-	output <- i.jobResult
-	return nil
+	jobResult.FullJobSummary = fullSummary
+	return &jobResult, nil
 }
 
-func (i *IndeedScraper) GetFullJobSummary(input <-chan JobResult) (<-chan error, <-chan JobResult) {
+func (i *IndeedScraper) GetFullJobSummary(input <-chan mapping.JobResult) (<-chan error, <-chan mapping.JobResult) {
 	errChannel := make(chan error)
-	output := make(chan JobResult)
+	output := make(chan mapping.JobResult)
 	go func() {
-		workChannel := make(chan indeedScraperWorker)
-		var wg sync.WaitGroup
         defer func() {
 			close(errChannel)
 			close(output)
 		}()
-		for j := 0; j < indeedScrapePoolSize; j++ {
-			wg.Add(1)
-			go func() {
-				for w := range workChannel {
-                    err := w.doGetFullJobSumary(output)
-					if err != nil {
-						errChannel <- err
-					}
-				}
-				wg.Done()
-			}()
-		}
 		for jobResult := range input {
             if jobResult.IsLast() {
-                close(workChannel)
-                wg.Wait()
                 output <- jobResult
 				return
 			}
-			workChannel <- indeedScraperWorker{
-				jobResult: jobResult,
-			}
+            jr, err := i.doGetFullJobSumary(jobResult)
+            if err != nil {
+                errChannel <- err
+                continue
+            }
+            output <- *jr
 		}
         
 	}()

@@ -2,16 +2,22 @@ package main
 
 import (
 	"testing"
+    eatonevents "github.com/ECLabs/Eaton-Feeder/events"
+    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
 )
 
 func TestIndeedClientPipeline(t *testing.T) {
+    eatonconfig.KafkaLoggerTopic = "logs-test"
+    err := eatonevents.Init()
+    if err != nil {
+        t.Fatal("failed to create event publisher: ", err)
+    }
 	i := new(IndeedClient)
 	scraper := new(IndeedScraper)
 	k, err := NewKafkaProducer()
 	if err != nil {
 		t.Fatal("failed to create new kafka producer: ", err)
 	}
-	offsetType = "newest"
 	c, err := NewKafkaConsumer()
 	if err != nil {
 		t.Fatal("failed to create new kafka consumer: ", err)
@@ -28,8 +34,8 @@ func TestIndeedClientPipeline(t *testing.T) {
 	scraperErrChannel, scraperJobResultChannel := scraper.GetFullJobSummary(jobResultChannel)
 	kafkaErrChannel, kafkaDoneChannel := k.SendMessages(scraperJobResultChannel)
 	go func() {
-		for err := range errChannel {
-			t.Fatal("ERROR: ", err)
+        for err := range errChannel {
+            t.Log("error thrown while polling indeed api: ", err)
 		}
 	}()
 

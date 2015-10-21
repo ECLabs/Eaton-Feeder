@@ -3,14 +3,11 @@ package main
 import (
 	"encoding/xml"
 	"github.com/Shopify/sarama"
-	"log"
-	"os"
-	"strings"
-)
-
-var (
-	kafkaServers = strings.Split(os.Getenv("KAFKA_SERVERS"), ",")
-	kafkaTopic   = os.Getenv("KAFKA_TOPIC")
+    "github.com/ECLabs/Eaton-Feeder/ipresolver"
+    "github.com/ECLabs/Eaton-Feeder/mapping"
+    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
+    eatonevents "github.com/ECLabs/Eaton-Feeder/events"
+    "fmt"
 )
 
 type IndeedKafkaProducer struct {
@@ -19,24 +16,24 @@ type IndeedKafkaProducer struct {
 
 func NewKafkaProducer() (*IndeedKafkaProducer, error) {
 	config := sarama.NewConfig()
-	config.ClientID = GetLocalAddr()
+	config.ClientID = ipresolver.GetLocalAddr()
 	config.Producer.RequiredAcks = sarama.WaitForLocal
 	config.Producer.Compression = sarama.CompressionNone
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 	config.Producer.Partitioner = sarama.NewHashPartitioner
-	asyncProducer, err := sarama.NewAsyncProducer(kafkaServers, config)
+	asyncProducer, err := sarama.NewAsyncProducer(eatonconfig.KafkaServers, config)
 	if err != nil {
 		return nil, err
 	}
 	go func() {
 		for msg := range asyncProducer.Successes() {
-			log.Println("Successfully sent message to topic ", msg.Topic, " with key ", msg.Key)
+			eatonevents.Info(fmt.Sprintf("Successfully sent message to topic %s with key %s", msg.Topic, msg.Key))
 		}
 	}()
 	go func() {
 		for err := range asyncProducer.Errors() {
-			log.Println("Failed to send message due to error: ", err)
+			eatonevents.Error("Failed to send message due to error: ", err)
 		}
 	}()
 	return &IndeedKafkaProducer{
@@ -48,7 +45,7 @@ func (i *IndeedKafkaProducer) Close() error {
 	return i.producer.Close()
 }
 
-func (i *IndeedKafkaProducer) SendMessages(jobResultChannel <-chan JobResult) (<-chan error, <-chan int) {
+func (i *IndeedKafkaProducer) SendMessages(jobResultChannel <-chan mapping.JobResult) (<-chan error, <-chan int) {
 	errorChannel := make(chan error)
 	kafkaDoneChannel := make(chan int)
 	go func() {
@@ -57,9 +54,7 @@ func (i *IndeedKafkaProducer) SendMessages(jobResultChannel <-chan JobResult) (<
 		defer i.Close()
 		for jobResult := range jobResultChannel {
 			if jobResult.IsLast() {
-				if Debug {
-					log.Println("received last jobResult. returning from function.")
-				}
+				eatonevents.Debug("received last jobResult. returning from function and signaling that the job is complete.")
 				kafkaDoneChannel <- 0
 				return
 			}
@@ -68,8 +63,10 @@ func (i *IndeedKafkaProducer) SendMessages(jobResultChannel <-chan JobResult) (<
 				errorChannel <- err
 				continue
 			}
+            
+            eatonevents.Debug(fmt.Sprintf("Sending JobResult JobKey: %s", jobResult.JobKey))
 			i.producer.Input() <- &sarama.ProducerMessage{
-				Topic: kafkaTopic,
+				Topic: eatonconfig.KafkaTopic,
 				Value: sarama.ByteEncoder(bytes),
 				Key:   sarama.StringEncoder(jobResult.JobKey),
 			}

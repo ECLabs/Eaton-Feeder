@@ -1,4 +1,4 @@
-package main
+package mapping
 
 import (
 	"encoding/json"
@@ -52,6 +52,17 @@ type JobResult struct {
 	FormattedLocationFull string     `xml:"formattedLocationFull" json:"formattedLocationFull"`
 	FormattedRelativeTime string     `xml:"formattedRelativeTime" json:"formattedRelativeTime"`
 	FullJobSummary        string     `xml:"fullJobSummary"`
+}
+
+type ApplicationEvent struct {
+	XMLName xml.Name  `xml:"event" json:"-"`
+	Level   string    `xml:"level"`
+	Message string    `xml:"message"`
+	Date    time.Time `xml:"date"`
+	Logger  string    `xml:"logger"`
+	Path    string    `xml:"path"`
+	Line    int       `xml:"line"`
+	Address string    `xml:"address"`
 }
 
 func NewLastJobResult() JobResult {
