@@ -19,9 +19,22 @@ Here's an example script to run the program as a producer:
 ```
 #!/bin/sh
 
+# Override the following to change which topic to produce messages to,
+# which servers to send messages to, and which publisher id to use.
+# The following are the default values:
+#   KAFKA_TOPIC = eaton-feeder
+#       This is the location of where each job result from the IndeedAPI is sent to in XML format.
+#   KAFKA_SERVERS = 127.0.0.1:9092
+#       This is the comma delmited listing of all kafka servers to send messages to.
+#   INDEED_PUBLISHER_ID = 
+#       This defaults to an empty string and is REQUIRED for the application to work properly.
+#   KAFKA_LOGGER_TOPIC = logs
+#       This is the topic that all logs are sent to to be consumed by the application in the http directory.
+
 KAFKA_TOPIC=myTopic
 KAFKA_SERVERS=127.0.0.1:9092
 INDEED_PUBLISHER_ID=123456789
+KAFKA_LOGGER_TOPIC=logs-producer
 
 export KAFKA_TOPIC
 export KAFKA_SERVERS
@@ -36,10 +49,25 @@ The program operates sightly differently when it's a consumer.  It will stay run
 
 ```
 #!/bin/sh
+# Override the following to change which topic to produce messages to,
+# which servers to send messages to, and which publisher id to use.
+# The following are the default values:
+#   KAFKA_TOPIC = eaton-feeder
+#       This is the location of where each job result from the IndeedAPI is consumed from and should match what the producer is using.
+#   KAFKA_SERVERS = 127.0.0.1:9092
+#       This is the comma delmited listing of all kafka servers to consumer messages from.
+#   KAFKA_LOGGER_TOPIC = logs
+#       This is the topic that all logs are sent to to be consumed by the application in the http directory.
+#   AWS_SECRET_KEY_ID =
+#       This defaults to an empty string and is REQUIRED for the application to work properly.
+#   AWS_SECRET_ACCESS_KEY =
+#       This defaults to an empty string and is REQUIRED for the application to work properly.
+
 AWS_ACCESS_KEY_ID=my_access_key
 AWS_SECRET_ACCESS_KEY=my_secret_key
 KAFKA_TOPIC=myTopic
 KAFKA_SERVERS=127.0.0.1:9092
+KAFKA_LOGGER_TOPIC=logs-consumer
 
 export AWS_SECRET_ACCESS_KEY
 export AWS_ACCESS_KEY_ID

@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+    eatonconfig "github.com/ECLabs/Eaton-Feeder/config"
 	eatonevents "github.com/ECLabs/Eaton-Feeder/events"
 	"log"
 	"net/http"
 )
 
 func main() {
+    eatonconfig.OffsetType = "oldest"
 	consumer, err := eatonevents.NewEventConsumer()
 	if err != nil {
 		log.Fatal("failed to create kafka consumer: ", err)
