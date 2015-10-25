@@ -45,7 +45,7 @@ export INDEED_PUBLISHER_ID
 $GOPATH/bin/Eaton-Feeder -produce=true -interval=-1
 ```
 
-The program operates sightly differently when it's a consumer.  It will stay running indefinitely since the client needs to always be ready for new messages.  To ensure that it is always running, you can install monit and have a script similar to the following to keep try of the process id:
+The program operates sightly differently when it's a consumer.  It will stay running indefinitely since the client needs to always be ready for new messages.  To ensure that it is always running, you can install monit and have a script similar to the following to keep track of the process id:
 
 ```
 #!/bin/sh
