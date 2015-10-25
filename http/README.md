@@ -26,7 +26,7 @@ Here's an example script to run the program:
 #   KAFKA_SERVERS = 127.0.0.1:9092
 #       This is the comma delmited listing of all kafka servers to send messages to.
 KAFKA_SERVERS=127.0.0.1:9092
-KAFKA_LOGGER_TOPIC=logs-producer
+KAFKA_LOGGER_TOPIC=logs
 
 export KAFKA_TOPIC
 export KAFKA_SERVERS
