@@ -19,11 +19,10 @@ Here's an example script to run the program:
 ```
 #!/bin/sh
 
-# Override the following to change which topic to produce messages to,
-# which servers to send messages to.
+# Override the following to change which topic/servers to consume messages from.
 # The following are the default values:
 #   KAFKA_LOGGER_TOPIC = logs
-#       This is the location of where each job result from the IndeedAPI is sent to in XML format.
+#       This is the topic that the Eaton-Feeder producer or consumer are sending logging messages to in JSON format.
 #   KAFKA_SERVERS = 127.0.0.1:9092
 #       This is the comma delmited listing of all kafka servers to send messages to.
 KAFKA_SERVERS=127.0.0.1:9092
